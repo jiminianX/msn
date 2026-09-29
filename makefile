@@ -15,7 +15,7 @@ github: FORCE
 	git push origin master
 
 all_tests: FORCE
-	cd $(API_DIR); make tests
+	PYTHONPATH=$(CURDIR) $(MAKE) -C $(API_DIR) tests
 	# cd $(DB_DIR); make tests
 
 dev_env: FORCE

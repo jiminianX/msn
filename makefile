@@ -5,6 +5,7 @@ API_DIR = server
 DB_DIR = data
 SEC_DIR = security
 REQ_DIR = .
+TEST_DIRS = server states
 
 FORCE:
 
@@ -15,8 +16,10 @@ github: FORCE
 	git push origin master
 
 all_tests: FORCE
-	PYTHONPATH=$(CURDIR) $(MAKE) -C $(API_DIR) tests
-	# cd $(DB_DIR); make tests
+	@for dir in $(TEST_DIRS); do \
+		echo "=== $$dir ==="; \
+		PYTHONPATH=$(CURDIR) $(MAKE) -C $$dir tests || exit 1; \
+	done
 
 dev_env: FORCE
 	pip install -r $(REQ_DIR)/requirements-dev.txt

@@ -28,10 +28,8 @@ def main():
     else:
         print("USAGE: python load.py <path_to_states_csv>")
         exit(1)
-   
     # Load states from the CSV file
     states = load_states(file_path)
-    
     # Print the loaded states
     for state in states:
         print(state)

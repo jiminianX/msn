@@ -22,6 +22,7 @@ HELLO_EP = '/hello'
 HELLO_RESP = 'hello'
 STATES_EP = '/states'
 STATES_RESP = 'States:'
+STATE_RESP = 'State'
 MESSAGE = 'Message'
 
 
@@ -67,3 +68,26 @@ class States(Resource):
         if states is None:
             raise wz.ServiceUnavailable('Database may be down.')
         return {STATES_RESP: states}
+
+
+@api.route(f'{STATES_EP}/<abbrev>')
+@api.doc(params={'abbrev': 'Two-letter state abbreviation, e.g. AL '
+                           '(case-insensitive)'})
+class State(Resource):
+    """
+    Look up a single state by its abbreviation.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'State not found')
+    def get(self, abbrev):
+        """
+        Return a single state by its two-letter abbreviation.
+
+        The response holds the state's name, capital, population and area.
+        Lookup is case-insensitive; unknown abbreviations return 404.
+        """
+        state = sqry.get_state(abbrev)
+        if state is None:
+            raise wz.NotFound(f'No state found with abbreviation '
+                              f'{abbrev!r}.')
+        return {STATE_RESP: state}

@@ -36,6 +36,17 @@ def get_states():
     return STATE_TEST_DATA
 
 
+def get_state(abbrev: str):
+    """
+    Return the dict for one state, looked up by its two-letter
+    abbreviation (case-insensitive), or None if it isn't found.
+    """
+    states = get_states()
+    if states is None or not isinstance(abbrev, str):
+        return None
+    return states.get(abbrev.upper())
+
+
 def main():
     states = get_states()
     for state, data in states.items():

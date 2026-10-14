@@ -23,7 +23,6 @@ HELLO_RESP = 'hello'
 STATES_EP = '/states'
 STATES_RESP = 'States:'
 STATE_RESP = 'State'
-MESSAGE = 'Message'
 
 
 @api.route(HELLO_EP)
@@ -50,7 +49,7 @@ class Endpoints(Resource):
         The `get()` method will return a sorted list of available endpoints.
         """
         endpoints = sorted(rule.rule for rule in api.app.url_map.iter_rules())
-        return {"Available endpoints": endpoints}
+        return {ENDPOINT_RESP: endpoints}
 
 
 @api.route(STATES_EP)

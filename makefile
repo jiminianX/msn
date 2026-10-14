@@ -5,7 +5,7 @@ API_DIR = server
 DB_DIR = data
 SEC_DIR = security
 REQ_DIR = .
-TEST_DIRS = data server states
+TEST_DIRS = data security server states
 
 FORCE:
 

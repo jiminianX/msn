@@ -11,6 +11,16 @@ def test_hello():
     assert ep.HELLO_RESP in resp_json
 
 
+def test_endpoints():
+    resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
+    assert resp.status_code == HTTPStatus.OK
+    resp_json = resp.get_json()
+    assert ep.ENDPOINT_RESP in resp_json
+    endpoints = resp_json[ep.ENDPOINT_RESP]
+    assert isinstance(endpoints, list)
+    assert ep.HELLO_EP in endpoints
+
+
 def test_get_states():
     resp = TEST_CLIENT.get(ep.STATES_EP)
     resp_json = resp.get_json()

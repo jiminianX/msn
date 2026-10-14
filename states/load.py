@@ -3,7 +3,7 @@
 
 
 import csv
-import os
+import sys
 
 
 def load_states(file_path):
@@ -23,8 +23,8 @@ def load_states(file_path):
 
 def main():
     # accept the file path as an argument
-    if len(os.sys.argv) > 1:
-        file_path = os.sys.argv[1]
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
     else:
         print("USAGE: python load.py <path_to_states_csv>")
         exit(1)

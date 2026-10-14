@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 import states.load as ld
 
 CSV = os.path.join(os.path.dirname(__file__),
@@ -17,3 +19,8 @@ def test_load_states_california():
     ca = [row for row in states if row['Abbrev'] == 'CA']
     assert len(ca) == 1
     assert ca[0]['State'] == 'California'
+
+
+def test_load_states_missing_file():
+    with pytest.raises(FileNotFoundError):
+        ld.load_states('no/such/file.csv')

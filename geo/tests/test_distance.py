@@ -48,6 +48,8 @@ def test_distance_is_symmetric():
         (float("nan"), 0, 20, 0),
         (float("inf"), 0, 20, 0),
         ("invalid", 0, 20, 0),
+        (True, 0, 20, 0),
+        (0, False, 20, 0),
     ],
 )
 def test_invalid_coordinates(coordinates):

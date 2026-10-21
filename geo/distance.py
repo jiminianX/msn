@@ -17,7 +17,9 @@ def distance_miles(lat1, lon1, lat2, lon2):
     coordinates = (lat1, lon1, lat2, lon2)
 
     for value in coordinates:
-        if not isinstance(value, (int, float)):
+        # bool is a subclass of int, so True and False would otherwise
+        # pass this check and be treated as the coordinates 1 and 0.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError("Coordinates must be numeric.")
 
         if not math.isfinite(value):

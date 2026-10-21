@@ -26,8 +26,10 @@ STATES_RESP = 'States:'
 STATE_RESP = 'State'
 COUNTRIES_EP = '/countries'
 COUNTRIES_RESP = 'Countries'
+COUNTRY_RESP = 'Country'
 LEAGUES_EP = '/leagues'
 LEAGUES_RESP = 'Leagues'
+LEAGUE_RESP = 'League'
 
 
 @api.route(HELLO_EP)
@@ -123,3 +125,44 @@ class Leagues(Resource):
         """
         leagues = data_load.load_leagues()
         return {LEAGUES_RESP: leagues}
+
+
+@api.route(f'{COUNTRIES_EP}/<code>')
+@api.doc(params={'code': 'Two-letter country code, e.g. US '
+                         '(case-insensitive)'})
+class Country(Resource):
+    """
+    Look up a single country by its code.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'Country not found')
+    def get(self, code):
+        """
+        Return a single country by its two-letter code.
+
+        Lookup is case-insensitive; unknown codes return 404.
+        """
+        country = data_load.get_country(code)
+        if country is None:
+            raise wz.NotFound(f'No country found with code {code!r}.')
+        return {COUNTRY_RESP: country}
+
+
+@api.route(f'{LEAGUES_EP}/<code>')
+@api.doc(params={'code': 'League code, e.g. NBA (case-insensitive)'})
+class League(Resource):
+    """
+    Look up a single league by its code.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'League not found')
+    def get(self, code):
+        """
+        Return a single league by its code.
+
+        Lookup is case-insensitive; unknown codes return 404.
+        """
+        league = data_load.get_league(code)
+        if league is None:
+            raise wz.NotFound(f'No league found with code {code!r}.')
+        return {LEAGUE_RESP: league}

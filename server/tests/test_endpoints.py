@@ -63,3 +63,37 @@ def test_get_leagues():
     assert "MLS" in leagues
     assert leagues["NBA"]["sport"] == "Basketball"
     assert leagues["MLS"]["sport"] == "Soccer"
+
+
+def test_get_country():
+    resp = TEST_CLIENT.get(f'{ep.COUNTRIES_EP}/US')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.COUNTRY_RESP]['name'] == 'United States'
+
+
+def test_get_country_case_insensitive():
+    resp = TEST_CLIENT.get(f'{ep.COUNTRIES_EP}/ca')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.COUNTRY_RESP]['name'] == 'Canada'
+
+
+def test_get_country_not_found():
+    resp = TEST_CLIENT.get(f'{ep.COUNTRIES_EP}/ZZ')
+    assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_league():
+    resp = TEST_CLIENT.get(f'{ep.LEAGUES_EP}/NBA')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.LEAGUE_RESP]['sport'] == 'Basketball'
+
+
+def test_get_league_case_insensitive():
+    resp = TEST_CLIENT.get(f'{ep.LEAGUES_EP}/mls')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.LEAGUE_RESP]['sport'] == 'Soccer'
+
+
+def test_get_league_not_found():
+    resp = TEST_CLIENT.get(f'{ep.LEAGUES_EP}/XFL')
+    assert resp.status_code == HTTPStatus.NOT_FOUND

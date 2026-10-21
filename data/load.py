@@ -42,3 +42,23 @@ def load_leagues():
     Return every league as a dict keyed on its code.
     """
     return {row[CODE]: row for row in load_csv(LEAGUES_CSV)}
+
+
+def get_country(code):
+    """
+    Return one country's dict, looked up by its two-letter code
+    (case-insensitive), or None if it isn't found.
+    """
+    if not isinstance(code, str):
+        return None
+    return load_countries().get(code.upper())
+
+
+def get_league(code):
+    """
+    Return one league's dict, looked up by its code
+    (case-insensitive), or None if it isn't found.
+    """
+    if not isinstance(code, str):
+        return None
+    return load_leagues().get(code.upper())

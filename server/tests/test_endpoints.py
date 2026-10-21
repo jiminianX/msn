@@ -1,5 +1,7 @@
 from http import HTTPStatus
 
+import pytest
+
 import server.endpoints as ep
 
 TEST_CLIENT = ep.app.test_client()
@@ -97,3 +99,27 @@ def test_get_league_case_insensitive():
 def test_get_league_not_found():
     resp = TEST_CLIENT.get(f'{ep.LEAGUES_EP}/XFL')
     assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+NYC_TO_LA = {'lat1': 40.7128, 'lon1': -74.0060,
+             'lat2': 34.0522, 'lon2': -118.2437}
+
+
+def test_get_distance():
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=NYC_TO_LA)
+    assert resp.status_code == HTTPStatus.OK
+    miles = resp.get_json()[ep.DISTANCE_RESP]
+    assert miles == pytest.approx(2445, abs=10)
+
+
+def test_get_distance_missing_param():
+    params = dict(NYC_TO_LA)
+    del params['lon2']
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_get_distance_out_of_range():
+    params = dict(NYC_TO_LA, lat1=91)
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST

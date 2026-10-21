@@ -4,7 +4,7 @@ The endpoint called `endpoints` will return all available endpoints.
 """
 from http import HTTPStatus
 
-from flask import Flask  # , request
+from flask import Flask, request
 from flask_restx import Resource, Api  # , fields  # Namespace
 from flask_cors import CORS
 
@@ -12,6 +12,7 @@ import werkzeug.exceptions as wz
 
 import states.query as sqry
 import data.load as data_load
+from geo.distance import distance_miles
 
 app = Flask(__name__)
 CORS(app)
@@ -30,6 +31,9 @@ COUNTRY_RESP = 'Country'
 LEAGUES_EP = '/leagues'
 LEAGUES_RESP = 'Leagues'
 LEAGUE_RESP = 'League'
+DISTANCE_EP = '/distance'
+DISTANCE_RESP = 'Distance (miles)'
+DISTANCE_PARAMS = ('lat1', 'lon1', 'lat2', 'lon2')
 
 
 @api.route(HELLO_EP)
@@ -166,3 +170,37 @@ class League(Resource):
         if league is None:
             raise wz.NotFound(f'No league found with code {code!r}.')
         return {LEAGUE_RESP: league}
+
+
+@api.route(DISTANCE_EP)
+@api.doc(params={
+    'lat1': 'Latitude of the first point, in decimal degrees (-90 to 90)',
+    'lon1': 'Longitude of the first point, in decimal degrees (-180 to 180)',
+    'lat2': 'Latitude of the second point, in decimal degrees (-90 to 90)',
+    'lon2': 'Longitude of the second point, in decimal degrees (-180 to 180)',
+})
+class Distance(Resource):
+    """
+    Compute the great-circle distance between two coordinates.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Missing, non-numeric or out-of-range coordinate')
+    def get(self):
+        """
+        Return the distance in miles between two latitude/longitude points.
+
+        All four query parameters are required. Missing, non-numeric,
+        non-finite or out-of-range values return 400.
+        """
+        missing = [name for name in DISTANCE_PARAMS
+                   if name not in request.args]
+        if missing:
+            raise wz.BadRequest(
+                f'Missing query parameter(s): {", ".join(missing)}.')
+        try:
+            coords = [float(request.args[name]) for name in DISTANCE_PARAMS]
+            miles = distance_miles(*coords)
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid coordinates: {err}')
+        return {DISTANCE_RESP: miles}

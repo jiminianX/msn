@@ -11,6 +11,7 @@ from flask_cors import CORS
 import werkzeug.exceptions as wz
 
 import states.query as sqry
+import data.load as data_load
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +24,10 @@ HELLO_RESP = 'hello'
 STATES_EP = '/states'
 STATES_RESP = 'States:'
 STATE_RESP = 'State'
+COUNTRIES_EP = '/countries'
+COUNTRIES_RESP = 'Countries'
+LEAGUES_EP = '/leagues'
+LEAGUES_RESP = 'Leagues'
 
 
 @api.route(HELLO_EP)
@@ -90,3 +95,31 @@ class State(Resource):
             raise wz.NotFound(f'No state found with abbreviation '
                               f'{abbrev!r}.')
         return {STATE_RESP: state}
+
+
+@api.route(COUNTRIES_EP)
+class Countries(Resource):
+    """
+    Return the countries supported by the sports venue directory.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return country information loaded from the CSV file.
+        """
+        countries = data_load.load_countries()
+        return {COUNTRIES_RESP: countries}
+
+
+@api.route(LEAGUES_EP)
+class Leagues(Resource):
+    """
+    Return the sports leagues supported by the directory.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return league information loaded from the CSV file.
+        """
+        leagues = data_load.load_leagues()
+        return {LEAGUES_RESP: leagues}

@@ -123,3 +123,9 @@ def test_get_distance_out_of_range():
     params = dict(NYC_TO_LA, lat1=91)
     resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
     assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_get_states_db_down(monkeypatch):
+    monkeypatch.setattr(ep.sqry, 'get_states', lambda: None)
+    resp = TEST_CLIENT.get(ep.STATES_EP)
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE

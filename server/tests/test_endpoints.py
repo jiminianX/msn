@@ -39,3 +39,27 @@ def test_get_state():
 def test_get_state_not_found():
     resp = TEST_CLIENT.get(f'{ep.STATES_EP}/ZZ')
     assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_countries():
+    response = TEST_CLIENT.get(ep.COUNTRIES_EP)
+
+    assert response.status_code == 200
+
+    countries = response.get_json()[ep.COUNTRIES_RESP]
+    assert "US" in countries
+    assert "CA" in countries
+    assert countries["US"]["name"] == "United States"
+    assert countries["CA"]["name"] == "Canada"
+
+
+def test_get_leagues():
+    response = TEST_CLIENT.get(ep.LEAGUES_EP)
+
+    assert response.status_code == 200
+
+    leagues = response.get_json()[ep.LEAGUES_RESP]
+    assert "NBA" in leagues
+    assert "MLS" in leagues
+    assert leagues["NBA"]["sport"] == "Basketball"
+    assert leagues["MLS"]["sport"] == "Soccer"

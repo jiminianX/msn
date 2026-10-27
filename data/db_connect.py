@@ -55,12 +55,24 @@ def convert_mongo_id(doc: dict):
         doc[MONGO_ID] = str(doc[MONGO_ID])
 
 
+def get_collection(collection, db=SE_DB):
+    """
+    Return a handle to one collection, connecting to Mongo if needed.
+
+    The module-level `client` starts out as None, so reaching for
+    client[db][collection] before anything has called connect_db()
+    raises TypeError instead of connecting. Every helper below goes
+    through here so the connection happens on demand.
+    """
+    return connect_db()[db][collection]
+
+
 def create(collection, doc, db=SE_DB):
     """
     Insert a single doc into collection.
     """
     print(f'{db=}')
-    return client[db][collection].insert_one(doc)
+    return get_collection(collection, db).insert_one(doc)
 
 
 def read_one(collection, filt, db=SE_DB):
@@ -68,7 +80,7 @@ def read_one(collection, filt, db=SE_DB):
     Find with a filter and return on the first doc found.
     Return None if not found.
     """
-    for doc in client[db][collection].find(filt):
+    for doc in get_collection(collection, db).find(filt):
         convert_mongo_id(doc)
         return doc
 
@@ -78,12 +90,13 @@ def delete(collection: str, filt: dict, db=SE_DB):
     Find with a filter and return on the first doc found.
     """
     print(f'{filt=}')
-    del_result = client[db][collection].delete_one(filt)
+    del_result = get_collection(collection, db).delete_one(filt)
     return del_result.deleted_count
 
 
 def update(collection, filters, update_dict, db=SE_DB):
-    return client[db][collection].update_one(filters, {'$set': update_dict})
+    return get_collection(collection, db).update_one(
+        filters, {'$set': update_dict})
 
 
 def read(collection, db=SE_DB, no_id=True) -> list:
@@ -91,7 +104,7 @@ def read(collection, db=SE_DB, no_id=True) -> list:
     Returns a list from the db.
     """
     ret = []
-    for doc in client[db][collection].find():
+    for doc in get_collection(collection, db).find():
         if no_id:
             del doc[MONGO_ID]
         else:
@@ -110,7 +123,7 @@ def read_dict(collection, key, db=SE_DB, no_id=True) -> dict:
 
 def fetch_all_as_dict(key, collection, db=SE_DB):
     ret = {}
-    for doc in client[db][collection].find():
+    for doc in get_collection(collection, db).find():
         del doc[MONGO_ID]
         ret[doc[key]] = doc
     return ret

@@ -49,6 +49,12 @@ def get_state(abbrev: str):
 
 def main():
     states = get_states()
+    # get_states() returns None when the database is down, and None has
+    # no .items() -- without this guard the script dies with an
+    # AttributeError instead of saying what went wrong.
+    if states is None:
+        print("Database is down; no states to show.")
+        return
     for state, data in states.items():
         print(f"State: {state}")
         print(f"Population: {data['population']}")

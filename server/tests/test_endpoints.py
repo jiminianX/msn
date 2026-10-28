@@ -129,3 +129,32 @@ def test_get_states_db_down(monkeypatch):
     monkeypatch.setattr(ep.sqry, 'get_states', lambda: None)
     resp = TEST_CLIENT.get(ep.STATES_EP)
     assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+@pytest.mark.parametrize(
+    'invalid_value',
+    ['hello', 'NaN', 'inf', '-inf'],
+)
+def test_get_distance_non_numeric_or_nonfinite(invalid_value):
+    params = dict(NYC_TO_LA, lat1=invalid_value)
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.parametrize('invalid_lon', [-181, 181])
+def test_get_distance_invalid_longitude(invalid_lon):
+    params = dict(NYC_TO_LA, lon1=invalid_lon)
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_get_distance_same_coordinates():
+    params = {
+        'lat1': 40.7128,
+        'lon1': -74.0060,
+        'lat2': 40.7128,
+        'lon2': -74.0060,
+    }
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.DISTANCE_RESP] == pytest.approx(0)

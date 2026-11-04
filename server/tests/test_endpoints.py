@@ -158,3 +158,68 @@ def test_get_distance_same_coordinates():
     resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string=params)
     assert resp.status_code == HTTPStatus.OK
     assert resp.get_json()[ep.DISTANCE_RESP] == pytest.approx(0)
+
+
+MSG = {'latitude': 40.7505, 'longitude': -73.9934}
+TD_GARDEN = {'latitude': 42.3662, 'longitude': -71.0621}
+SCOTIABANK = {'latitude': 43.6435, 'longitude': -79.3791}
+
+
+def test_post_road_trip():
+    resp = TEST_CLIENT.post(ep.ROAD_TRIP_EP,
+                            json={ep.ROAD_TRIP_VENUES: [MSG, TD_GARDEN]})
+    assert resp.status_code == HTTPStatus.OK
+    miles = resp.get_json()[ep.ROAD_TRIP_RESP]
+    assert miles == pytest.approx(187.5, abs=1.0)
+
+
+def test_post_road_trip_multiple_legs():
+    two_legs = {ep.ROAD_TRIP_VENUES: [MSG, TD_GARDEN, SCOTIABANK]}
+    one_leg = {ep.ROAD_TRIP_VENUES: [MSG, TD_GARDEN]}
+    total = TEST_CLIENT.post(
+        ep.ROAD_TRIP_EP, json=two_legs).get_json()[ep.ROAD_TRIP_RESP]
+    first = TEST_CLIENT.post(
+        ep.ROAD_TRIP_EP, json=one_leg).get_json()[ep.ROAD_TRIP_RESP]
+    # Adding a stop can only add mileage.
+    assert total > first
+
+
+@pytest.mark.parametrize('venues', [[], [MSG]])
+def test_post_road_trip_no_travel(venues):
+    resp = TEST_CLIENT.post(ep.ROAD_TRIP_EP,
+                            json={ep.ROAD_TRIP_VENUES: venues})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.ROAD_TRIP_RESP] == pytest.approx(0)
+
+
+def test_post_road_trip_accepts_a_venue_record():
+    # A row straight out of the venues data carries extra keys;
+    # the endpoint must not choke on them.
+    record = dict(MSG, venue_id='MSG', name='Madison Square Garden')
+    resp = TEST_CLIENT.post(ep.ROAD_TRIP_EP,
+                            json={ep.ROAD_TRIP_VENUES: [record, TD_GARDEN]})
+    assert resp.status_code == HTTPStatus.OK
+
+
+@pytest.mark.parametrize('body', [
+    {},
+    {'stops': [MSG, TD_GARDEN]},
+    {ep.ROAD_TRIP_VENUES: 'MSG'},
+    {ep.ROAD_TRIP_VENUES: [MSG, 'TD Garden']},
+    {ep.ROAD_TRIP_VENUES: [MSG, {'latitude': 42.3662}]},
+    {ep.ROAD_TRIP_VENUES: [MSG, {'latitude': 'north', 'longitude': -71.06}]},
+    {ep.ROAD_TRIP_VENUES: [MSG, {'latitude': 91, 'longitude': -71.06}]},
+])
+def test_post_road_trip_bad_request(body):
+    resp = TEST_CLIENT.post(ep.ROAD_TRIP_EP, json=body)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_post_road_trip_no_json_body():
+    resp = TEST_CLIENT.post(ep.ROAD_TRIP_EP)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_road_trip_is_listed_in_endpoints():
+    resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
+    assert ep.ROAD_TRIP_EP in resp.get_json()[ep.ENDPOINT_RESP]

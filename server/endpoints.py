@@ -13,6 +13,7 @@ import werkzeug.exceptions as wz
 import states.query as sqry
 import data.load as data_load
 from geo.distance import distance_miles
+from geo.road_trip import road_trip_miles
 
 app = Flask(__name__)
 CORS(app)
@@ -34,6 +35,9 @@ LEAGUE_RESP = 'League'
 DISTANCE_EP = '/distance'
 DISTANCE_RESP = 'Distance (miles)'
 DISTANCE_PARAMS = ('lat1', 'lon1', 'lat2', 'lon2')
+ROAD_TRIP_EP = '/road_trip'
+ROAD_TRIP_RESP = 'Total distance (miles)'
+ROAD_TRIP_VENUES = 'venues'
 
 
 @api.route(HELLO_EP)
@@ -204,3 +208,40 @@ class Distance(Resource):
         except ValueError as err:
             raise wz.BadRequest(f'Invalid coordinates: {err}')
         return {DISTANCE_RESP: miles}
+
+
+@api.route(ROAD_TRIP_EP)
+class RoadTrip(Resource):
+    """
+    Total up the great-circle distance of a multi-venue trip.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Body is not JSON, or a venue has bad coordinates')
+    def post(self):
+        """
+        Return the total mileage of a trip through venues, in order.
+
+        Expects a JSON body of the form
+        `{"venues": [{"latitude": 40.75, "longitude": -73.99}, ...]}`.
+        A venue record from the venues data can be passed straight
+        through, since it already carries both fields. An empty or
+        single-venue list has zero travel distance.
+
+        This is a POST rather than a GET because a trip has an
+        unbounded number of stops, which does not fit in query
+        parameters.
+        """
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or ROAD_TRIP_VENUES not in body:
+            raise wz.BadRequest(
+                f'JSON body must contain a {ROAD_TRIP_VENUES!r} key.')
+        venues = body[ROAD_TRIP_VENUES]
+        if not isinstance(venues, list):
+            raise wz.BadRequest(
+                f'{ROAD_TRIP_VENUES!r} must be a list of venues.')
+        try:
+            miles = road_trip_miles(venues)
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid venues: {err}')
+        return {ROAD_TRIP_RESP: miles}

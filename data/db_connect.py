@@ -2,6 +2,7 @@
 All interaction with MongoDB should be through this file!
 We may be required to use a new database at any point.
 """
+import functools
 import os
 
 import pymongo as pm
@@ -42,6 +43,34 @@ def connect_db():
     return client
 
 
+def needs_connection(fn):
+    """
+    Guarantee a live Mongo client before `fn` runs.
+
+    Every database function in this module reads the module-level
+    `client`, which starts out as None. Opening each body with its own
+    connect_db() call means eight separate chances to forget one, and a
+    forgotten one fails as `TypeError: 'NoneType' object is not
+    subscriptable` -- an error that says nothing about connections.
+    Stating the requirement once here and applying it as
+    @needs_connection keeps it attached to each function instead of
+    resting on everyone remembering a convention.
+
+    connect_db() is idempotent -- it returns the cached client once one
+    exists -- so a decorated function calling another decorated
+    function costs one extra comparison, not a second connection.
+
+    functools.wraps keeps the wrapped function's name, signature and
+    docstring, so the decorator stays invisible to anything that
+    introspects this module.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        connect_db()
+        return fn(*args, **kwargs)
+    return wrapper
+
+
 def is_db_up():
     """
     Returns True if the DB is up and running.
@@ -55,18 +84,18 @@ def convert_mongo_id(doc: dict):
         doc[MONGO_ID] = str(doc[MONGO_ID])
 
 
+@needs_connection
 def get_collection(collection, db=SE_DB):
     """
-    Return a handle to one collection, connecting to Mongo if needed.
+    Return a handle to one collection.
 
-    The module-level `client` starts out as None, so reaching for
-    client[db][collection] before anything has called connect_db()
-    raises TypeError instead of connecting. Every helper below goes
-    through here so the connection happens on demand.
+    @needs_connection has already guaranteed `client` is live by the
+    time this body runs, which is why it can index the global directly.
     """
-    return connect_db()[db][collection]
+    return client[db][collection]
 
 
+@needs_connection
 def create(collection, doc, db=SE_DB):
     """
     Insert a single doc into collection.
@@ -75,6 +104,7 @@ def create(collection, doc, db=SE_DB):
     return get_collection(collection, db).insert_one(doc)
 
 
+@needs_connection
 def read_one(collection, filt, db=SE_DB):
     """
     Find with a filter and return on the first doc found.
@@ -85,6 +115,7 @@ def read_one(collection, filt, db=SE_DB):
         return doc
 
 
+@needs_connection
 def delete(collection: str, filt: dict, db=SE_DB):
     """
     Find with a filter and return on the first doc found.
@@ -94,11 +125,13 @@ def delete(collection: str, filt: dict, db=SE_DB):
     return del_result.deleted_count
 
 
+@needs_connection
 def update(collection, filters, update_dict, db=SE_DB):
     return get_collection(collection, db).update_one(
         filters, {'$set': update_dict})
 
 
+@needs_connection
 def read(collection, db=SE_DB, no_id=True) -> list:
     """
     Returns a list from the db.
@@ -113,6 +146,7 @@ def read(collection, db=SE_DB, no_id=True) -> list:
     return ret
 
 
+@needs_connection
 def read_dict(collection, key, db=SE_DB, no_id=True) -> dict:
     recs = read(collection, db=db, no_id=no_id)
     recs_as_dict = {}
@@ -121,6 +155,7 @@ def read_dict(collection, key, db=SE_DB, no_id=True) -> dict:
     return recs_as_dict
 
 
+@needs_connection
 def fetch_all_as_dict(key, collection, db=SE_DB):
     ret = {}
     for doc in get_collection(collection, db).find():

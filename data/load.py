@@ -12,8 +12,10 @@ import os
 DATA_DIR = os.path.dirname(__file__)
 COUNTRIES_CSV = os.path.join(DATA_DIR, 'countries.csv')
 LEAGUES_CSV = os.path.join(DATA_DIR, 'leagues.csv')
+VENUES_CSV = os.path.join(DATA_DIR, 'venues.csv')
 
 CODE = 'code'
+VENUE_ID = 'venue_id'
 
 
 def load_csv(file_path):
@@ -62,3 +64,20 @@ def get_league(code):
     if not isinstance(code, str):
         return None
     return load_leagues().get(code.upper())
+
+
+def load_venues():
+    """
+    Return every venue as a dict keyed on its venue_id.
+    """
+    return {row[VENUE_ID]: row for row in load_csv(VENUES_CSV)}
+
+
+def get_venue(venue_id):
+    """
+    Return one venue's dict, looked up by its venue_id
+    (case-insensitive), or None if it isn't found.
+    """
+    if not isinstance(venue_id, str):
+        return None
+    return load_venues().get(venue_id.upper())

@@ -12,13 +12,25 @@ The project is currently in early development. The following endpoints are imple
 |--------|----------|-------------|
 | GET | `/hello` | Returns a basic greeting to verify that the API is running. |
 | GET | `/endpoints` | Lists available API endpoints. |
-| GET | `/states` | Returns three hardcoded states. |
+| GET | `/states` | Returns three hardcoded states (503 if the database is down). |
+| GET | `/states/<abbrev>` | Returns one state by its two-letter abbreviation. |
+| GET | `/countries` | Lists the supported countries. |
+| GET | `/countries/<code>` | Returns one country by its two-letter code. |
+| GET | `/leagues` | Lists the supported leagues. |
+| GET | `/leagues/<code>` | Returns one league by its code, e.g. `NBA`. |
+| GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. |
+| GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. |
+| GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. |
+| GET | `/venues/by_capacity?state=` | Ranks venues by capacity, largest first; `state` is optional. |
+| GET | `/distance?lat1=&lon1=&lat2=&lon2=` | Returns the great-circle distance in miles between two points. |
+| POST | `/road_trip` | Totals the mileage of a trip through a JSON list of venues, in order. |
 | GET | `/swagger.json` | Returns the API's Swagger specification. |
+
+Path lookups are case-insensitive and return 404 for unknown codes. Missing or invalid query parameters return 400.
 
 **Current limitations:**
 - State data currently consists of three hardcoded entries instead of records from MongoDB.
-- MongoDB connection utilities exist, but database-backed endpoints are not yet implemented.
-- NBA and MLS venue data and geographic calculations are planned for future development.
+- Country, league, and venue data is read from CSV files in `data/` rather than MongoDB.
 
 ## Prerequisites
 

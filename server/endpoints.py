@@ -13,6 +13,8 @@ import werkzeug.exceptions as wz
 import states.query as sqry
 import data.load as data_load
 from geo.distance import distance_miles
+from geo.capacity import rank_venues_by_capacity
+from geo.nearest import nearest_venue
 from geo.road_trip import road_trip_miles
 
 app = Flask(__name__)
@@ -38,6 +40,33 @@ DISTANCE_PARAMS = ('lat1', 'lon1', 'lat2', 'lon2')
 ROAD_TRIP_EP = '/road_trip'
 ROAD_TRIP_RESP = 'Total distance (miles)'
 ROAD_TRIP_VENUES = 'venues'
+VENUES_EP = '/venues'
+VENUES_RESP = 'Venues'
+VENUE_RESP = 'Venue'
+NEAREST_EP = f'{VENUES_EP}/nearest'
+NEAREST_RESP = 'Nearest venue'
+NEAREST_PARAMS = ('lat', 'lon')
+BY_CAPACITY_EP = f'{VENUES_EP}/by_capacity'
+BY_CAPACITY_RESP = 'Venues by capacity'
+BY_CAPACITY_STATE = 'state'
+
+
+def parse_float_args(names):
+    """
+    Read the named query parameters as floats, in the order given.
+
+    Raises BadRequest (400) naming every missing parameter, or when a
+    value cannot be parsed as a number. Range checks are left to the
+    caller, since what counts as valid depends on the parameter.
+    """
+    missing = [name for name in names if name not in request.args]
+    if missing:
+        raise wz.BadRequest(
+            f'Missing query parameter(s): {", ".join(missing)}.')
+    try:
+        return [float(request.args[name]) for name in names]
+    except ValueError as err:
+        raise wz.BadRequest(f'Query parameters must be numeric: {err}')
 
 
 @api.route(HELLO_EP)
@@ -197,13 +226,8 @@ class Distance(Resource):
         All four query parameters are required. Missing, non-numeric,
         non-finite or out-of-range values return 400.
         """
-        missing = [name for name in DISTANCE_PARAMS
-                   if name not in request.args]
-        if missing:
-            raise wz.BadRequest(
-                f'Missing query parameter(s): {", ".join(missing)}.')
+        coords = parse_float_args(DISTANCE_PARAMS)
         try:
-            coords = [float(request.args[name]) for name in DISTANCE_PARAMS]
             miles = distance_miles(*coords)
         except ValueError as err:
             raise wz.BadRequest(f'Invalid coordinates: {err}')
@@ -245,3 +269,89 @@ class RoadTrip(Resource):
         except ValueError as err:
             raise wz.BadRequest(f'Invalid venues: {err}')
         return {ROAD_TRIP_RESP: miles}
+
+
+@api.route(VENUES_EP)
+class Venues(Resource):
+    """
+    Return every NBA and MLS venue in the directory.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return all venues loaded from the CSV file, keyed on venue_id.
+        """
+        venues = data_load.load_venues()
+        return {VENUES_RESP: venues}
+
+
+@api.route(f'{VENUES_EP}/<venue_id>')
+@api.doc(params={'venue_id': 'Venue identifier, e.g. MSG '
+                             '(case-insensitive)'})
+class Venue(Resource):
+    """
+    Look up a single venue by its identifier.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'Venue not found')
+    def get(self, venue_id):
+        """
+        Return a single venue by its venue_id.
+
+        Lookup is case-insensitive; unknown identifiers return 404.
+        """
+        venue = data_load.get_venue(venue_id)
+        if venue is None:
+            raise wz.NotFound(f'No venue found with id {venue_id!r}.')
+        return {VENUE_RESP: venue}
+
+
+@api.route(NEAREST_EP)
+@api.doc(params={
+    'lat': 'Latitude to search from, in decimal degrees (-90 to 90)',
+    'lon': 'Longitude to search from, in decimal degrees (-180 to 180)',
+})
+class NearestVenue(Resource):
+    """
+    Find the venue closest to a coordinate.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Missing, non-numeric or out-of-range coordinate')
+    def get(self):
+        """
+        Return the closest venue to lat/lon and its distance in miles.
+
+        Both query parameters are required. Missing, non-numeric,
+        non-finite or out-of-range values return 400.
+        """
+        lat, lon = parse_float_args(NEAREST_PARAMS)
+        venues = list(data_load.load_venues().values())
+        try:
+            result = nearest_venue(lat, lon, venues)
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid coordinates: {err}')
+        return {NEAREST_RESP: result}
+
+
+@api.route(BY_CAPACITY_EP)
+@api.doc(params={
+    BY_CAPACITY_STATE: 'Optional two-letter state/province code, e.g. NY '
+                       '(case-insensitive)',
+})
+class VenuesByCapacity(Resource):
+    """
+    Rank venues by seating capacity.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return venues sorted by capacity, largest first.
+
+        Pass `state` to limit the ranking to one state or province;
+        a code with no venues returns an empty list.
+        """
+        state = request.args.get(BY_CAPACITY_STATE)
+        venues = list(data_load.load_venues().values())
+        ranked = rank_venues_by_capacity(venues, state_code=state)
+        return {BY_CAPACITY_RESP: ranked}

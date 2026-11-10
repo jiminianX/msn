@@ -223,3 +223,103 @@ def test_post_road_trip_no_json_body():
 def test_road_trip_is_listed_in_endpoints():
     resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
     assert ep.ROAD_TRIP_EP in resp.get_json()[ep.ENDPOINT_RESP]
+
+
+def test_get_venues():
+    resp = TEST_CLIENT.get(ep.VENUES_EP)
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert isinstance(venues, dict)
+    assert venues['MSG']['name'] == 'Madison Square Garden'
+    assert 'SCOTIABANK' in venues
+
+
+def test_venues_is_listed_in_endpoints():
+    resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
+    assert ep.VENUES_EP in resp.get_json()[ep.ENDPOINT_RESP]
+
+
+def test_get_venue():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/MSG')
+    assert resp.status_code == HTTPStatus.OK
+    venue = resp.get_json()[ep.VENUE_RESP]
+    assert venue['name'] == 'Madison Square Garden'
+    assert venue['city'] == 'New York'
+
+
+def test_get_venue_case_insensitive():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/tdgarden')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUE_RESP]['state_code'] == 'MA'
+
+
+def test_get_venue_not_found():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/NOPE')
+    assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_distance_reports_every_missing_param():
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string={'lat1': 40.7})
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    message = resp.get_json()['message']
+    for name in ('lon1', 'lat2', 'lon2'):
+        assert name in message
+
+
+TIMES_SQUARE = {'lat': 40.7580, 'lon': -73.9855}
+
+
+def test_get_nearest_venue():
+    resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string=TIMES_SQUARE)
+    assert resp.status_code == HTTPStatus.OK
+    result = resp.get_json()[ep.NEAREST_RESP]
+    assert result['venue']['venue_id'] == 'MSG'
+    assert result['distance_miles'] == pytest.approx(0.6, abs=0.2)
+
+
+def test_get_nearest_venue_in_canada():
+    resp = TEST_CLIENT.get(ep.NEAREST_EP,
+                           query_string={'lat': 45.56, 'lon': -73.55})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.NEAREST_RESP]['venue']['venue_id'] == 'SAPUTO'
+
+
+def test_nearest_is_not_mistaken_for_a_venue_id():
+    # /venues/<venue_id> must not swallow the static /venues/nearest route.
+    resp = TEST_CLIENT.get(ep.NEAREST_EP)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.parametrize('params', [
+    {'lat': 40.7580},
+    {'lat': 'north', 'lon': -73.9855},
+    {'lat': 91, 'lon': -73.9855},
+    {'lat': 40.7580, 'lon': 'inf'},
+])
+def test_get_nearest_venue_bad_request(params):
+    resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_get_venues_by_capacity():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP)
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert isinstance(ranked, list)
+    assert len(ranked) == len(TEST_CLIENT.get(
+        ep.VENUES_EP).get_json()[ep.VENUES_RESP])
+    capacities = [int(venue['capacity']) for venue in ranked]
+    assert capacities == sorted(capacities, reverse=True)
+
+
+def test_get_venues_by_capacity_filtered_by_state():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={'state': 'ny'})
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert [venue['venue_id'] for venue in ranked] == ['MSG', 'BARCLAYS']
+
+
+def test_get_venues_by_capacity_unknown_state():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={'state': 'ZZ'})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.BY_CAPACITY_RESP] == []

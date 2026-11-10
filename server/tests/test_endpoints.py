@@ -237,3 +237,22 @@ def test_get_venues():
 def test_venues_is_listed_in_endpoints():
     resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
     assert ep.VENUES_EP in resp.get_json()[ep.ENDPOINT_RESP]
+
+
+def test_get_venue():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/MSG')
+    assert resp.status_code == HTTPStatus.OK
+    venue = resp.get_json()[ep.VENUE_RESP]
+    assert venue['name'] == 'Madison Square Garden'
+    assert venue['city'] == 'New York'
+
+
+def test_get_venue_case_insensitive():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/tdgarden')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUE_RESP]['state_code'] == 'MA'
+
+
+def test_get_venue_not_found():
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/NOPE')
+    assert resp.status_code == HTTPStatus.NOT_FOUND

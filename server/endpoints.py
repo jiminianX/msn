@@ -40,6 +40,7 @@ ROAD_TRIP_RESP = 'Total distance (miles)'
 ROAD_TRIP_VENUES = 'venues'
 VENUES_EP = '/venues'
 VENUES_RESP = 'Venues'
+VENUE_RESP = 'Venue'
 
 
 @api.route(HELLO_EP)
@@ -261,3 +262,24 @@ class Venues(Resource):
         """
         venues = data_load.load_venues()
         return {VENUES_RESP: venues}
+
+
+@api.route(f'{VENUES_EP}/<venue_id>')
+@api.doc(params={'venue_id': 'Venue identifier, e.g. MSG '
+                             '(case-insensitive)'})
+class Venue(Resource):
+    """
+    Look up a single venue by its identifier.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'Venue not found')
+    def get(self, venue_id):
+        """
+        Return a single venue by its venue_id.
+
+        Lookup is case-insensitive; unknown identifiers return 404.
+        """
+        venue = data_load.get_venue(venue_id)
+        if venue is None:
+            raise wz.NotFound(f'No venue found with id {venue_id!r}.')
+        return {VENUE_RESP: venue}

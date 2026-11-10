@@ -13,6 +13,7 @@ import werkzeug.exceptions as wz
 import states.query as sqry
 import data.load as data_load
 from geo.distance import distance_miles
+from geo.nearest import nearest_venue
 from geo.road_trip import road_trip_miles
 
 app = Flask(__name__)
@@ -41,6 +42,9 @@ ROAD_TRIP_VENUES = 'venues'
 VENUES_EP = '/venues'
 VENUES_RESP = 'Venues'
 VENUE_RESP = 'Venue'
+NEAREST_EP = f'{VENUES_EP}/nearest'
+NEAREST_RESP = 'Nearest venue'
+NEAREST_PARAMS = ('lat', 'lon')
 
 
 def parse_float_args(names):
@@ -296,3 +300,31 @@ class Venue(Resource):
         if venue is None:
             raise wz.NotFound(f'No venue found with id {venue_id!r}.')
         return {VENUE_RESP: venue}
+
+
+@api.route(NEAREST_EP)
+@api.doc(params={
+    'lat': 'Latitude to search from, in decimal degrees (-90 to 90)',
+    'lon': 'Longitude to search from, in decimal degrees (-180 to 180)',
+})
+class NearestVenue(Resource):
+    """
+    Find the venue closest to a coordinate.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Missing, non-numeric or out-of-range coordinate')
+    def get(self):
+        """
+        Return the closest venue to lat/lon and its distance in miles.
+
+        Both query parameters are required. Missing, non-numeric,
+        non-finite or out-of-range values return 400.
+        """
+        lat, lon = parse_float_args(NEAREST_PARAMS)
+        venues = list(data_load.load_venues().values())
+        try:
+            result = nearest_venue(lat, lon, venues)
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid coordinates: {err}')
+        return {NEAREST_RESP: result}

@@ -264,3 +264,38 @@ def test_get_distance_reports_every_missing_param():
     message = resp.get_json()['message']
     for name in ('lon1', 'lat2', 'lon2'):
         assert name in message
+
+
+TIMES_SQUARE = {'lat': 40.7580, 'lon': -73.9855}
+
+
+def test_get_nearest_venue():
+    resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string=TIMES_SQUARE)
+    assert resp.status_code == HTTPStatus.OK
+    result = resp.get_json()[ep.NEAREST_RESP]
+    assert result['venue']['venue_id'] == 'MSG'
+    assert result['distance_miles'] == pytest.approx(0.6, abs=0.2)
+
+
+def test_get_nearest_venue_in_canada():
+    resp = TEST_CLIENT.get(ep.NEAREST_EP,
+                           query_string={'lat': 45.56, 'lon': -73.55})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.NEAREST_RESP]['venue']['venue_id'] == 'SAPUTO'
+
+
+def test_nearest_is_not_mistaken_for_a_venue_id():
+    # /venues/<venue_id> must not swallow the static /venues/nearest route.
+    resp = TEST_CLIENT.get(ep.NEAREST_EP)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.parametrize('params', [
+    {'lat': 40.7580},
+    {'lat': 'north', 'lon': -73.9855},
+    {'lat': 91, 'lon': -73.9855},
+    {'lat': 40.7580, 'lon': 'inf'},
+])
+def test_get_nearest_venue_bad_request(params):
+    resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string=params)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST

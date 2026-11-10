@@ -38,6 +38,8 @@ DISTANCE_PARAMS = ('lat1', 'lon1', 'lat2', 'lon2')
 ROAD_TRIP_EP = '/road_trip'
 ROAD_TRIP_RESP = 'Total distance (miles)'
 ROAD_TRIP_VENUES = 'venues'
+VENUES_EP = '/venues'
+VENUES_RESP = 'Venues'
 
 
 @api.route(HELLO_EP)
@@ -245,3 +247,17 @@ class RoadTrip(Resource):
         except ValueError as err:
             raise wz.BadRequest(f'Invalid venues: {err}')
         return {ROAD_TRIP_RESP: miles}
+
+
+@api.route(VENUES_EP)
+class Venues(Resource):
+    """
+    Return every NBA and MLS venue in the directory.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return all venues loaded from the CSV file, keyed on venue_id.
+        """
+        venues = data_load.load_venues()
+        return {VENUES_RESP: venues}

@@ -223,3 +223,17 @@ def test_post_road_trip_no_json_body():
 def test_road_trip_is_listed_in_endpoints():
     resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
     assert ep.ROAD_TRIP_EP in resp.get_json()[ep.ENDPOINT_RESP]
+
+
+def test_get_venues():
+    resp = TEST_CLIENT.get(ep.VENUES_EP)
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert isinstance(venues, dict)
+    assert venues['MSG']['name'] == 'Madison Square Garden'
+    assert 'SCOTIABANK' in venues
+
+
+def test_venues_is_listed_in_endpoints():
+    resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
+    assert ep.VENUES_EP in resp.get_json()[ep.ENDPOINT_RESP]

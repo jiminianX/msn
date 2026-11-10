@@ -43,6 +43,24 @@ VENUES_RESP = 'Venues'
 VENUE_RESP = 'Venue'
 
 
+def parse_float_args(names):
+    """
+    Read the named query parameters as floats, in the order given.
+
+    Raises BadRequest (400) naming every missing parameter, or when a
+    value cannot be parsed as a number. Range checks are left to the
+    caller, since what counts as valid depends on the parameter.
+    """
+    missing = [name for name in names if name not in request.args]
+    if missing:
+        raise wz.BadRequest(
+            f'Missing query parameter(s): {", ".join(missing)}.')
+    try:
+        return [float(request.args[name]) for name in names]
+    except ValueError as err:
+        raise wz.BadRequest(f'Query parameters must be numeric: {err}')
+
+
 @api.route(HELLO_EP)
 class HelloWorld(Resource):
     """
@@ -200,13 +218,8 @@ class Distance(Resource):
         All four query parameters are required. Missing, non-numeric,
         non-finite or out-of-range values return 400.
         """
-        missing = [name for name in DISTANCE_PARAMS
-                   if name not in request.args]
-        if missing:
-            raise wz.BadRequest(
-                f'Missing query parameter(s): {", ".join(missing)}.')
+        coords = parse_float_args(DISTANCE_PARAMS)
         try:
-            coords = [float(request.args[name]) for name in DISTANCE_PARAMS]
             miles = distance_miles(*coords)
         except ValueError as err:
             raise wz.BadRequest(f'Invalid coordinates: {err}')

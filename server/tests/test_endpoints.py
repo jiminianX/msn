@@ -256,3 +256,11 @@ def test_get_venue_case_insensitive():
 def test_get_venue_not_found():
     resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/NOPE')
     assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_distance_reports_every_missing_param():
+    resp = TEST_CLIENT.get(ep.DISTANCE_EP, query_string={'lat1': 40.7})
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    message = resp.get_json()['message']
+    for name in ('lon1', 'lat2', 'lon2'):
+        assert name in message

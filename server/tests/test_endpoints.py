@@ -299,3 +299,27 @@ def test_nearest_is_not_mistaken_for_a_venue_id():
 def test_get_nearest_venue_bad_request(params):
     resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string=params)
     assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_get_venues_by_capacity():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP)
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert isinstance(ranked, list)
+    assert len(ranked) == len(TEST_CLIENT.get(
+        ep.VENUES_EP).get_json()[ep.VENUES_RESP])
+    capacities = [int(venue['capacity']) for venue in ranked]
+    assert capacities == sorted(capacities, reverse=True)
+
+
+def test_get_venues_by_capacity_filtered_by_state():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={'state': 'ny'})
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert [venue['venue_id'] for venue in ranked] == ['MSG', 'BARCLAYS']
+
+
+def test_get_venues_by_capacity_unknown_state():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={'state': 'ZZ'})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.BY_CAPACITY_RESP] == []

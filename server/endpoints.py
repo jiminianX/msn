@@ -13,6 +13,7 @@ import werkzeug.exceptions as wz
 import states.query as sqry
 import data.load as data_load
 from geo.distance import distance_miles
+from geo.capacity import rank_venues_by_capacity
 from geo.nearest import nearest_venue
 from geo.road_trip import road_trip_miles
 
@@ -45,6 +46,9 @@ VENUE_RESP = 'Venue'
 NEAREST_EP = f'{VENUES_EP}/nearest'
 NEAREST_RESP = 'Nearest venue'
 NEAREST_PARAMS = ('lat', 'lon')
+BY_CAPACITY_EP = f'{VENUES_EP}/by_capacity'
+BY_CAPACITY_RESP = 'Venues by capacity'
+BY_CAPACITY_STATE = 'state'
 
 
 def parse_float_args(names):
@@ -328,3 +332,26 @@ class NearestVenue(Resource):
         except ValueError as err:
             raise wz.BadRequest(f'Invalid coordinates: {err}')
         return {NEAREST_RESP: result}
+
+
+@api.route(BY_CAPACITY_EP)
+@api.doc(params={
+    BY_CAPACITY_STATE: 'Optional two-letter state/province code, e.g. NY '
+                       '(case-insensitive)',
+})
+class VenuesByCapacity(Resource):
+    """
+    Rank venues by seating capacity.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return venues sorted by capacity, largest first.
+
+        Pass `state` to limit the ranking to one state or province;
+        a code with no venues returns an empty list.
+        """
+        state = request.args.get(BY_CAPACITY_STATE)
+        venues = list(data_load.load_venues().values())
+        ranked = rank_venues_by_capacity(venues, state_code=state)
+        return {BY_CAPACITY_RESP: ranked}

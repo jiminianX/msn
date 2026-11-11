@@ -17,6 +17,12 @@ VENUES_CSV = os.path.join(DATA_DIR, 'venues.csv')
 CODE = 'code'
 VENUE_ID = 'venue_id'
 
+VENUE_INT_FIELDS = ('capacity', 'opened_year')
+VENUE_FLOAT_FIELDS = ('latitude', 'longitude')
+VENUE_BOOL_FIELDS = ('indoor',)
+TRUE_VALUES = ('true', 'yes', '1')
+FALSE_VALUES = ('false', 'no', '0')
+
 
 def load_csv(file_path):
     """
@@ -66,11 +72,65 @@ def get_league(code):
     return load_leagues().get(code.upper())
 
 
+def typed_venue(row):
+    """
+    Return a copy of one venue row with its numeric and boolean fields
+    converted from the text a CSV holds.
+
+    Every CSV value arrives as a string, so an unconverted row serves
+    `"capacity": "19812"` and `"indoor": "false"` over the API. The
+    boolean is the dangerous one: a non-empty string is always truthy,
+    in Python and in JavaScript alike, so `if venue['indoor']` is True
+    for an outdoor stadium. Converting once here keeps every caller
+    from having to coerce, and keeps them from forgetting to.
+
+    Args:
+        row (dict): One row as read from the venues CSV.
+
+    Raises:
+        ValueError: If a field is missing or cannot be converted,
+            naming the venue and the field so a typo in the CSV points
+            at itself instead of failing later inside a distance
+            calculation.
+    """
+    venue = dict(row)
+    venue_id = venue.get(VENUE_ID, '<unknown>')
+
+    def convert(field, cast):
+        try:
+            return cast(venue[field])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f'Venue {venue_id!r} has an invalid {field}: '
+                f'{venue.get(field)!r}.') from exc
+
+    for field in VENUE_INT_FIELDS:
+        venue[field] = convert(field, int)
+    for field in VENUE_FLOAT_FIELDS:
+        venue[field] = convert(field, float)
+    for field in VENUE_BOOL_FIELDS:
+        raw = str(venue.get(field, '')).strip().lower()
+        if raw in TRUE_VALUES:
+            venue[field] = True
+        elif raw in FALSE_VALUES:
+            venue[field] = False
+        else:
+            raise ValueError(
+                f'Venue {venue_id!r} has an invalid {field}: '
+                f'{venue.get(field)!r}.')
+    return venue
+
+
 def load_venues():
     """
     Return every venue as a dict keyed on its venue_id.
+
+    Numeric and boolean fields are converted from the text the CSV
+    holds, so callers get `19812` and `False` rather than `'19812'`
+    and `'false'`.
     """
-    return {row[VENUE_ID]: row for row in load_csv(VENUES_CSV)}
+    return {row[VENUE_ID]: typed_venue(row)
+            for row in load_csv(VENUES_CSV)}
 
 
 def get_venue(venue_id):

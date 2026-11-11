@@ -2,6 +2,7 @@
 This is the file containing all of the endpoints for our flask app.
 The endpoint called `endpoints` will return all available endpoints.
 """
+import functools
 from http import HTTPStatus
 
 from flask import Flask, request
@@ -11,6 +12,7 @@ from flask_cors import CORS
 import werkzeug.exceptions as wz
 
 import states.query as sqry
+import data.db_connect as dbc
 import data.load as data_load
 from geo.distance import distance_miles
 from geo.capacity import rank_venues_by_capacity
@@ -89,6 +91,29 @@ def parse_int_arg(name):
     except ValueError:
         raise wz.BadRequest(
             f'{name!r} must be a whole number, got {raw!r}.')
+
+
+def unavailable_when_db_is_down(fn):
+    """
+    Turn a DatabaseDown into a 503 Service Unavailable.
+
+    The venue endpoints all read from MongoDB and all owe the client
+    the same answer when it is not reachable. Stating the translation
+    once as a decorator keeps it off four separate method bodies and
+    keeps them from drifting apart, the same reasoning that put
+    @needs_connection in data/db_connect.py.
+
+    503 rather than 500: the request was valid and the server is fine,
+    a dependency is missing. That is also what /states already answers
+    in the same situation, so the API stays consistent.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except dbc.DatabaseDown as err:
+            raise wz.ServiceUnavailable(str(err))
+    return wrapper
 
 
 @api.route(HELLO_EP)
@@ -299,9 +324,13 @@ class Venues(Resource):
     Return every NBA and MLS venue in the directory.
     """
     @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self):
         """
-        Return all venues loaded from the CSV file, keyed on venue_id.
+        Return all venues loaded from the venues collection, keyed on
+        venue_id. Returns 503 when MongoDB is not reachable.
         """
         venues = data_load.load_venues()
         return {VENUES_RESP: venues}
@@ -316,11 +345,15 @@ class Venue(Resource):
     """
     @api.response(HTTPStatus.OK.value, 'Success')
     @api.response(HTTPStatus.NOT_FOUND.value, 'Venue not found')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self, venue_id):
         """
         Return a single venue by its venue_id.
 
-        Lookup is case-insensitive; unknown identifiers return 404.
+        Lookup is case-insensitive; unknown identifiers return 404,
+        and an unreachable MongoDB returns 503.
         """
         venue = data_load.get_venue(venue_id)
         if venue is None:
@@ -340,12 +373,16 @@ class NearestVenue(Resource):
     @api.response(HTTPStatus.OK.value, 'Success')
     @api.response(HTTPStatus.BAD_REQUEST.value,
                   'Missing, non-numeric or out-of-range coordinate')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self):
         """
         Return the closest venue to lat/lon and its distance in miles.
 
         Both query parameters are required. Missing, non-numeric,
-        non-finite or out-of-range values return 400.
+        non-finite or out-of-range values return 400, and an
+        unreachable MongoDB returns 503.
         """
         lat, lon = parse_float_args(NEAREST_PARAMS)
         venues = list(data_load.load_venues().values())
@@ -372,6 +409,9 @@ class VenuesByCapacity(Resource):
     @api.response(HTTPStatus.OK.value, 'Success')
     @api.response(HTTPStatus.BAD_REQUEST.value,
                   'Non-numeric or non-positive limit')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self):
         """
         Return venues sorted by capacity, largest first.

@@ -18,10 +18,10 @@ The project is currently in early development. The following endpoints are imple
 | GET | `/countries/<code>` | Returns one country by its two-letter code. |
 | GET | `/leagues` | Lists the supported leagues. |
 | GET | `/leagues/<code>` | Returns one league by its code, e.g. `NBA`. |
-| GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. |
-| GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. |
-| GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. |
-| GET | `/venues/by_capacity?state=&country=&limit=` | Ranks venues by capacity, largest first. All three filters are optional and combine; `state` is a state/province code, `country` a country code, `limit` a positive whole number. |
+| GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. Read from MongoDB; 503 if the database is unreachable. |
+| GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. Read from MongoDB; 503 if the database is unreachable. |
+| GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. Read from MongoDB; 503 if the database is unreachable. |
+| GET | `/venues/by_capacity?state=&country=&limit=` | Ranks venues by capacity, largest first. All three filters are optional and combine; `state` is a state/province code, `country` a country code, `limit` a positive whole number. Read from MongoDB; 503 if the database is unreachable. |
 | GET | `/distance?lat1=&lon1=&lat2=&lon2=` | Returns the great-circle distance in miles between two points. |
 | POST | `/road_trip` | Totals the mileage of a trip through a JSON list of venues, in order. |
 | GET | `/swagger.json` | Returns the API's Swagger specification. |
@@ -30,7 +30,8 @@ Path lookups are case-insensitive and return 404 for unknown codes. Missing or i
 
 **Current limitations:**
 - State data currently consists of three hardcoded entries instead of records from MongoDB.
-- Country, league, and venue data is read from CSV files in `data/` rather than MongoDB.
+- Country and league data is read from CSV files in `data/` rather than MongoDB.
+- The venue endpoints read from MongoDB; the remaining collections have not been migrated yet.
 
 ## Prerequisites
 
@@ -77,6 +78,38 @@ export PYTHONPATH=$(pwd)
 **Important:** The `PYTHONPATH` configuration is required so that the development server and tests can import the project's packages by their top-level names. Without it, imports may fail.
 
 These commands assume a Bash-compatible shell.
+
+## Seeding the Database
+
+The venue endpoints read from MongoDB, so a fresh checkout needs its data loaded once. The CSV files in `data/` are the source of truth in version control; this step copies them into the database.
+
+Start MongoDB first. On macOS with Homebrew:
+
+```bash
+brew tap mongodb/brew
+brew install mongodb-community
+brew services start mongodb-community
+```
+
+Then seed:
+
+```bash
+make seed
+```
+
+Expected output:
+
+```
+venues: 16 records
+countries: 2 records
+leagues: 2 records
+```
+
+Seeding is idempotent — each document is upserted on its natural key, so running it again refreshes the records rather than duplicating them. Re-run it after editing a CSV.
+
+If MongoDB is not running, `make seed` exits non-zero and the venue endpoints return 503. Every other endpoint keeps working.
+
+The test suite does not require MongoDB: it substitutes the storage layer at a seam, so `make all_tests` passes with or without a database running. To run the suite against a real seeded database instead, set `RUN_DB_INTEGRATION=1`.
 
 ## Running the Application
 

@@ -9,10 +9,14 @@ matter which directory the caller runs from.
 import csv
 import os
 
+import data.db_connect as dbc
+
 DATA_DIR = os.path.dirname(__file__)
 COUNTRIES_CSV = os.path.join(DATA_DIR, 'countries.csv')
 LEAGUES_CSV = os.path.join(DATA_DIR, 'leagues.csv')
 VENUES_CSV = os.path.join(DATA_DIR, 'venues.csv')
+
+VENUES_COLLECTION = 'venues'
 
 CODE = 'code'
 VENUE_ID = 'venue_id'
@@ -136,13 +140,25 @@ def load_venues_from_csv():
 
 def load_venues():
     """
-    Return every venue as a dict keyed on its venue_id.
+    Return every venue from the venues collection, keyed on venue_id.
 
-    Numeric and boolean fields are converted from the text the CSV
-    holds, so callers get `19812` and `False` rather than `'19812'`
-    and `'false'`.
+    This reads from MongoDB, not from the CSV. The CSV remains the
+    seed source in version control -- run `make seed` once on a fresh
+    checkout -- and the database is what the API serves.
+
+    No silent fallback to the CSV, deliberately: a fallback would make
+    "Mongo is working" and "Mongo is broken" produce identical
+    responses, so a passing request would prove nothing about the
+    database and a real outage would look like a healthy API serving
+    stale file data.
+
+    Raises:
+        dbc.DatabaseDown: when MongoDB is not reachable.
     """
-    return load_venues_from_csv()
+    if not dbc.is_db_up():
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; venue data is unavailable.')
+    return dbc.read_dict(VENUES_COLLECTION, VENUE_ID)
 
 
 def get_venue(venue_id):

@@ -16,6 +16,20 @@ client = None
 
 MONGO_ID = '_id'
 
+
+class DatabaseDown(Exception):
+    """
+    Raised when an operation needs MongoDB and it is not reachable.
+
+    An exception rather than a None return, deliberately. A loader that
+    answers None on failure gets used as though it succeeded -- that is
+    exactly how `states/query.py` ended up calling `.items()` on None
+    and dying with an AttributeError that named nothing useful. This
+    cannot be ignored by accident, and it carries a message the API can
+    hand back with a 503.
+    """
+
+
 # pymongo connects lazily and its server-selection timeout defaults to
 # 30 seconds, so MongoClient() succeeds against a dead database and the
 # wait only arrives on the first real operation. Two seconds is long

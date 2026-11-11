@@ -2,6 +2,8 @@ from http import HTTPStatus
 
 import pytest
 
+import data.db_connect as dbc
+import data.load as data_load
 import server.endpoints as ep
 
 TEST_CLIENT = ep.app.test_client()
@@ -401,3 +403,78 @@ def test_get_venues_by_capacity_bad_limit(bad_limit):
     resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
                            query_string={ep.BY_CAPACITY_LIMIT: bad_limit})
     assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+# --- the venue endpoints when MongoDB is unreachable ----------------
+#
+# conftest.py serves these tests from the CSV so the rest of the suite
+# does not need a database. These override that in the other
+# direction, which is the whole reason the loader is patched at a seam
+# rather than faked wholesale.
+
+VENUE_READ_ENDPOINTS = [
+    ep.VENUES_EP,
+    f'{ep.VENUES_EP}/MSG',
+    ep.NEAREST_EP,
+    ep.BY_CAPACITY_EP,
+]
+
+
+@pytest.fixture
+def db_down(monkeypatch):
+    def raise_down():
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; venue data is unavailable.')
+    monkeypatch.setattr(data_load, 'load_venues', raise_down)
+
+
+@pytest.mark.parametrize('endpoint', VENUE_READ_ENDPOINTS)
+def test_venue_endpoints_are_unavailable_when_the_db_is_down(
+        endpoint, db_down):
+    query = {'lat': '40.75', 'lon': '-73.99'}
+    resp = TEST_CLIENT.get(endpoint, query_string=query)
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+def test_unavailable_response_explains_itself(db_down):
+    """
+    503 with no message leaves the caller guessing between a crash and
+    a missing dependency, so the reason travels with the status.
+    """
+    resp = TEST_CLIENT.get(ep.VENUES_EP)
+    assert 'MongoDB' in resp.get_data(as_text=True)
+
+
+def test_bad_request_still_wins_over_unavailable(db_down):
+    """
+    Argument validation runs before the read, so a malformed request
+    against a down database is still a 400. Were this a 503, a client
+    would retry a request that can never succeed.
+    """
+    resp = TEST_CLIENT.get(ep.NEAREST_EP, query_string={'lat': '40.75'})
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_endpoints_not_backed_by_mongo_still_answer(db_down):
+    """
+    Countries, leagues and the pure geometry endpoints read CSVs or
+    nothing at all, so a down database must not take them with it.
+    """
+    assert TEST_CLIENT.get(ep.COUNTRIES_EP).status_code == HTTPStatus.OK
+    assert TEST_CLIENT.get(ep.LEAGUES_EP).status_code == HTTPStatus.OK
+    assert TEST_CLIENT.get(ep.HELLO_EP).status_code == HTTPStatus.OK
+    distance = TEST_CLIENT.get(ep.DISTANCE_EP, query_string={
+        'lat1': '40.75', 'lon1': '-73.99',
+        'lat2': '34.04', 'lon2': '-118.27'})
+    assert distance.status_code == HTTPStatus.OK
+
+
+def test_the_decorator_is_applied_to_every_venue_read():
+    """
+    A fifth venue endpoint added without the decorator would answer
+    500 instead of 503, and no existing test would notice. This fails
+    the moment one is missing.
+    """
+    for resource in (ep.Venues, ep.Venue, ep.NearestVenue,
+                     ep.VenuesByCapacity):
+        assert hasattr(resource.get, '__wrapped__'), resource.__name__

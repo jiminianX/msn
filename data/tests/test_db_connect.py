@@ -6,6 +6,8 @@ a fake, so CI never needs a database.
 """
 import pytest
 
+import pymongo as pm
+
 import data.db_connect as dbc
 
 
@@ -42,9 +44,35 @@ class FakeDB:
 class FakeClient:
     def __init__(self, *args, **kwargs):
         self.args = args
+        self.kwargs = kwargs
+        self.admin = FakeAdmin()
 
     def __getitem__(self, db):
         return FakeDB(db)
+
+
+class FakeAdmin:
+    """
+    Stands in for client.admin, which is where `ping` runs.
+    """
+    def __init__(self):
+        self.commands = []
+
+    def command(self, name, **kwargs):
+        self.commands.append((name, kwargs))
+        return {'ok': 1}
+
+
+class UnreachableAdmin:
+    def command(self, name, **kwargs):
+        raise pm.errors.ServerSelectionTimeoutError(
+            'localhost:27017: [Errno 61] Connection refused')
+
+
+class UnreachableClient(FakeClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.admin = UnreachableAdmin()
 
 
 @pytest.fixture(autouse=True)
@@ -210,3 +238,41 @@ def test_crud_helpers_reach_the_collection(fake_mongo):
         'MSG': {'venue_id': 'MSG'}}
     assert dbc.fetch_all_as_dict('venue_id', 'venues') == {
         'MSG': {'venue_id': 'MSG'}}
+
+
+def test_is_db_up_pings_the_server(fake_mongo):
+    assert dbc.is_db_up() is True
+    # The point of the rewrite: it is a real round trip, not a
+    # hardcoded True. Assert the command was actually issued.
+    assert dbc.client.admin.commands == [
+        ('ping', {'maxTimeMS': dbc.PING_TIMEOUT_MS})]
+
+
+def test_is_db_up_is_false_when_unreachable(monkeypatch):
+    monkeypatch.delenv('CLOUD_MONGO', raising=False)
+    monkeypatch.setattr(dbc.pm, 'MongoClient', UnreachableClient)
+    assert dbc.is_db_up() is False
+
+
+def test_is_db_up_does_not_raise_when_unreachable(monkeypatch):
+    """
+    Callers branch on this rather than catching -- states/query.py and
+    the endpoints both do -- so an exception here would turn a
+    known-unavailable database into a 500 instead of a 503.
+    """
+    monkeypatch.delenv('CLOUD_MONGO', raising=False)
+    monkeypatch.setattr(dbc.pm, 'MongoClient', UnreachableClient)
+    assert dbc.is_db_up() is False
+    assert dbc.is_db_up() is False
+
+
+def test_connect_db_sets_an_explicit_timeout(fake_mongo):
+    """
+    pymongo defaults serverSelectionTimeoutMS to 30 seconds, so
+    without this a dead database makes every request hang for half a
+    minute before failing.
+    """
+    created = dbc.connect_db()
+    assert created.kwargs['serverSelectionTimeoutMS'] == (
+        dbc.SERVER_SELECTION_TIMEOUT_MS)
+    assert dbc.SERVER_SELECTION_TIMEOUT_MS < 30000

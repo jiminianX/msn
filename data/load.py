@@ -121,6 +121,19 @@ def typed_venue(row):
     return venue
 
 
+def load_venues_from_csv():
+    """
+    Return every venue from the CSV, keyed on its venue_id.
+
+    This is the seed source: `data/seed.py` reads it to populate the
+    venues collection. It is kept separate from `load_venues()` so the
+    serving path and the seeding path cannot drift apart, and so the
+    CSV stays readable without a database.
+    """
+    return {row[VENUE_ID]: typed_venue(row)
+            for row in load_csv(VENUES_CSV)}
+
+
 def load_venues():
     """
     Return every venue as a dict keyed on its venue_id.
@@ -129,8 +142,7 @@ def load_venues():
     holds, so callers get `19812` and `False` rather than `'19812'`
     and `'false'`.
     """
-    return {row[VENUE_ID]: typed_venue(row)
-            for row in load_csv(VENUES_CSV)}
+    return load_venues_from_csv()
 
 
 def get_venue(venue_id):

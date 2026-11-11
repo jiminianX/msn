@@ -16,6 +16,17 @@ client = None
 
 MONGO_ID = '_id'
 
+# pymongo connects lazily and its server-selection timeout defaults to
+# 30 seconds, so MongoClient() succeeds against a dead database and the
+# wait only arrives on the first real operation. Two seconds is long
+# enough for a local mongod to answer and short enough that a request
+# fails fast instead of appearing to hang.
+SERVER_SELECTION_TIMEOUT_MS = 2000
+
+# A liveness probe should give up sooner still -- it is answering "is
+# the database there", and an endpoint calls it before doing any work.
+PING_TIMEOUT_MS = 500
+
 
 def connect_db():
     """
@@ -34,12 +45,15 @@ def connect_db():
                 raise ValueError('You must set your password '
                                  + 'to use Mongo in the cloud.')
             print('Connecting to Mongo in the cloud.')
-            client = pm.MongoClient(f'mongodb+srv://gcallah:{password}'
-                                    + '@koukoumongo1.yud9b.mongodb.net/'
-                                    + '?retryWrites=true&w=majority')
+            client = pm.MongoClient(
+                f'mongodb+srv://gcallah:{password}'
+                + '@koukoumongo1.yud9b.mongodb.net/'
+                + '?retryWrites=true&w=majority',
+                serverSelectionTimeoutMS=SERVER_SELECTION_TIMEOUT_MS)
         else:
             print("Connecting to Mongo locally.")
-            client = pm.MongoClient()
+            client = pm.MongoClient(
+                serverSelectionTimeoutMS=SERVER_SELECTION_TIMEOUT_MS)
     return client
 
 
@@ -73,8 +87,29 @@ def needs_connection(fn):
 
 def is_db_up():
     """
-    Returns True if the DB is up and running.
+    Return True when MongoDB answers a ping, False otherwise.
+
+    This used to `return True` unconditionally, which made every caller
+    believe a database was present even with nothing installed. The
+    check has to be an actual round trip: pymongo connects lazily, so
+    `MongoClient()` succeeds against a dead server and `client` being
+    non-None proves only that an object exists.
+
+    `ping` is the cheapest command that proves the server is reachable
+    and answering. It runs against the `admin` database, which needs no
+    application data and exists on every deployment.
+
+    Never raises. A caller asking whether the database is up wants an
+    answer, not an exception to handle -- `states/query.py` and the
+    endpoints both branch on this, so an exception here would turn a
+    known-unavailable database into a 500.
     """
+    try:
+        connect_db().admin.command(
+            'ping', maxTimeMS=PING_TIMEOUT_MS)
+    except pm.errors.PyMongoError as err:
+        print(f'MongoDB is not reachable: {err}')
+        return False
     return True
 
 

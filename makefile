@@ -26,5 +26,8 @@ dev_env: FORCE
 	@echo "You should set PYTHONPATH to: "
 	@echo $(shell pwd)
 
+seed: FORCE
+	PYTHONPATH=$(CURDIR) python -m data.seed
+
 docs: FORCE
 	cd $(API_DIR); make docs

@@ -77,3 +77,32 @@ def test_original_data_unchanged(sample_venues):
     rank_venues_by_capacity(sample_venues)
 
     assert [v['name'] for v in sample_venues] == original_order
+
+
+def test_filter_by_country():
+    venues = [
+        {'name': 'US Arena', 'country_code': 'US',
+         'capacity': 20000},
+        {'name': 'Canada Arena', 'country_code': 'CA',
+         'capacity': 19000},
+    ]
+
+    result = rank_venues_by_capacity(venues, country_code='CA')
+
+    assert [v['name'] for v in result] == ['Canada Arena']
+
+
+def test_country_filter_case_insensitive():
+    venues = [
+        {'name': 'Canada Arena', 'country_code': 'CA',
+         'capacity': 19000},
+    ]
+
+    result = rank_venues_by_capacity(venues, country_code='ca')
+
+    assert len(result) == 1
+
+
+def test_invalid_country_filter():
+    with pytest.raises(ValueError):
+        rank_venues_by_capacity([], country_code=123)

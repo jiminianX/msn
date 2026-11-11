@@ -3,15 +3,19 @@ Rank sports venues by seating capacity.
 """
 
 
-def rank_venues_by_capacity(venues, state_code=None):
+def rank_venues_by_capacity(venues, state_code=None, country_code=None):
     """
     Return venues sorted by capacity, highest first.
 
     Optionally filter by a two-letter state/province code.
     The original venue dictionaries are not modified.
+    Optionally filter venues by country code.
     """
     if state_code is not None and not isinstance(state_code, str):
         raise ValueError("State code must be a string.")
+
+    if country_code is not None and not isinstance(country_code, str):
+        raise ValueError("Country code must be a string.")
 
     ranked = []
 
@@ -25,6 +29,14 @@ def rank_venues_by_capacity(venues, state_code=None):
                 raise ValueError("Invalid state code.")
 
             if venue_state.upper() != state_code.upper():
+                continue
+
+        if country_code is not None:
+            venue_country = venue.get('country_code', '')
+            if not isinstance(venue_country, str):
+                raise ValueError("Invalid country code.")
+
+            if venue_country.upper() != country_code.upper():
                 continue
 
         capacity = venue.get('capacity')

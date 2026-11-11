@@ -3,19 +3,29 @@ Rank sports venues by seating capacity.
 """
 
 
-def rank_venues_by_capacity(venues, state_code=None, country_code=None):
+def rank_venues_by_capacity(
+    venues, state_code=None, country_code=None, limit=None
+):
     """
     Return venues sorted by capacity, highest first.
 
     Optionally filter by a two-letter state/province code.
     The original venue dictionaries are not modified.
     Optionally filter venues by country code.
+    Optionally return only the top N venues.
     """
     if state_code is not None and not isinstance(state_code, str):
         raise ValueError("State code must be a string.")
 
     if country_code is not None and not isinstance(country_code, str):
         raise ValueError("Country code must be a string.")
+
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValueError("Limit must be a positive integer.")
+
+        if limit < 1:
+            raise ValueError("Limit must be a positive integer.")
 
     ranked = []
 
@@ -59,4 +69,5 @@ def rank_venues_by_capacity(venues, state_code=None, country_code=None):
 
     ranked.sort(key=lambda item: item[0], reverse=True)
 
-    return [venue for _, venue in ranked]
+    results = [venue for _, venue in ranked]
+    return results[:limit] if limit is not None else results

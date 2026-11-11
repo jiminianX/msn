@@ -106,3 +106,25 @@ def test_country_filter_case_insensitive():
 def test_invalid_country_filter():
     with pytest.raises(ValueError):
         rank_venues_by_capacity([], country_code=123)
+
+
+def test_capacity_top_two(sample_venues):
+    result = rank_venues_by_capacity(sample_venues, limit=2)
+
+    assert [v['name'] for v in result] == [
+        'Stadium B', 'Arena C'
+    ]
+
+
+def test_capacity_limit_with_state(sample_venues):
+    result = rank_venues_by_capacity(
+        sample_venues, state_code='NY', limit=1
+    )
+
+    assert [v['name'] for v in result] == ['Arena C']
+
+
+@pytest.mark.parametrize('invalid_limit', [0, -1, 1.5, True])
+def test_invalid_capacity_limit(invalid_limit):
+    with pytest.raises(ValueError):
+        rank_venues_by_capacity([], limit=invalid_limit)

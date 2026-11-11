@@ -323,3 +323,81 @@ def test_get_venues_by_capacity_unknown_state():
     resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={'state': 'ZZ'})
     assert resp.status_code == HTTPStatus.OK
     assert resp.get_json()[ep.BY_CAPACITY_RESP] == []
+
+
+def test_get_venues_by_capacity_filtered_by_country():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_COUNTRY: 'CA'})
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert [venue['venue_id'] for venue in ranked] == [
+        'BCPLACE', 'BMOFIELD', 'SCOTIABANK', 'SAPUTO']
+
+
+def test_get_venues_by_capacity_country_is_case_insensitive():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_COUNTRY: 'ca'})
+    assert resp.status_code == HTTPStatus.OK
+    assert len(resp.get_json()[ep.BY_CAPACITY_RESP]) == 4
+
+
+def test_get_venues_by_capacity_unknown_country():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_COUNTRY: 'ZZ'})
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.BY_CAPACITY_RESP] == []
+
+
+def test_country_and_state_codes_do_not_collide():
+    """
+    CA is both California's state code and Canada's country code, so
+    the two filters have to be judged separately rather than against a
+    single shared code.
+    """
+    by_country = TEST_CLIENT.get(
+        ep.BY_CAPACITY_EP,
+        query_string={ep.BY_CAPACITY_COUNTRY: 'CA'},
+    ).get_json()[ep.BY_CAPACITY_RESP]
+    by_state = TEST_CLIENT.get(
+        ep.BY_CAPACITY_EP,
+        query_string={ep.BY_CAPACITY_STATE: 'CA'},
+    ).get_json()[ep.BY_CAPACITY_RESP]
+    assert {venue['country_code'] for venue in by_country} == {'CA'}
+    assert {venue['state_code'] for venue in by_state} == {'CA'}
+    assert {venue['venue_id'] for venue in by_country}.isdisjoint(
+        venue['venue_id'] for venue in by_state)
+
+
+def test_get_venues_by_capacity_limit():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_LIMIT: '3'})
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert [venue['venue_id'] for venue in ranked] == [
+        'BCPLACE', 'BMOFIELD', 'PROVIDENCE']
+
+
+def test_get_venues_by_capacity_limit_above_the_venue_count():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_LIMIT: '500'})
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert len(ranked) == len(TEST_CLIENT.get(
+        ep.VENUES_EP).get_json()[ep.VENUES_RESP])
+
+
+def test_get_venues_by_capacity_filters_combine():
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP, query_string={
+        ep.BY_CAPACITY_COUNTRY: 'CA',
+        ep.BY_CAPACITY_LIMIT: '2',
+    })
+    assert resp.status_code == HTTPStatus.OK
+    ranked = resp.get_json()[ep.BY_CAPACITY_RESP]
+    assert [venue['venue_id'] for venue in ranked] == ['BCPLACE', 'BMOFIELD']
+
+
+@pytest.mark.parametrize('bad_limit', ['two', '', '1.5', '0', '-3'])
+def test_get_venues_by_capacity_bad_limit(bad_limit):
+    resp = TEST_CLIENT.get(ep.BY_CAPACITY_EP,
+                           query_string={ep.BY_CAPACITY_LIMIT: bad_limit})
+    assert resp.status_code == HTTPStatus.BAD_REQUEST

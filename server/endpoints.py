@@ -49,6 +49,8 @@ NEAREST_PARAMS = ('lat', 'lon')
 BY_CAPACITY_EP = f'{VENUES_EP}/by_capacity'
 BY_CAPACITY_RESP = 'Venues by capacity'
 BY_CAPACITY_STATE = 'state'
+BY_CAPACITY_COUNTRY = 'country'
+BY_CAPACITY_LIMIT = 'limit'
 
 
 def parse_float_args(names):
@@ -67,6 +69,26 @@ def parse_float_args(names):
         return [float(request.args[name]) for name in names]
     except ValueError as err:
         raise wz.BadRequest(f'Query parameters must be numeric: {err}')
+
+
+def parse_int_arg(name):
+    """
+    Read one optional query parameter as an integer.
+
+    Returns None when the parameter is absent, which leaves the
+    underlying default in place. Raises BadRequest (400) when the value
+    is present but is not a whole number. Range checks are left to the
+    caller, which lets the geo package stay the one place that decides
+    what counts as a valid value.
+    """
+    if name not in request.args:
+        return None
+    raw = request.args[name]
+    try:
+        return int(raw)
+    except ValueError:
+        raise wz.BadRequest(
+            f'{name!r} must be a whole number, got {raw!r}.')
 
 
 @api.route(HELLO_EP)
@@ -338,20 +360,37 @@ class NearestVenue(Resource):
 @api.doc(params={
     BY_CAPACITY_STATE: 'Optional two-letter state/province code, e.g. NY '
                        '(case-insensitive)',
+    BY_CAPACITY_COUNTRY: 'Optional two-letter country code, e.g. CA for '
+                         'Canada (case-insensitive)',
+    BY_CAPACITY_LIMIT: 'Optional positive whole number; return only the '
+                       'top N venues',
 })
 class VenuesByCapacity(Resource):
     """
     Rank venues by seating capacity.
     """
     @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Non-numeric or non-positive limit')
     def get(self):
         """
         Return venues sorted by capacity, largest first.
 
-        Pass `state` to limit the ranking to one state or province;
-        a code with no venues returns an empty list.
+        Pass `state` to limit the ranking to one state or province, and
+        `country` to limit it to one country; a code with no venues
+        returns an empty list. Pass `limit` to return only the top N.
+        The filters combine, and `state` and `country` are judged
+        separately -- `state=CA` means California, `country=CA` means
+        Canada.
         """
         state = request.args.get(BY_CAPACITY_STATE)
+        country = request.args.get(BY_CAPACITY_COUNTRY)
+        limit = parse_int_arg(BY_CAPACITY_LIMIT)
         venues = list(data_load.load_venues().values())
-        ranked = rank_venues_by_capacity(venues, state_code=state)
+        try:
+            ranked = rank_venues_by_capacity(venues, state_code=state,
+                                             country_code=country,
+                                             limit=limit)
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid ranking request: {err}')
         return {BY_CAPACITY_RESP: ranked}

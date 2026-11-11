@@ -21,7 +21,7 @@ The project is currently in early development. The following endpoints are imple
 | GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. |
 | GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. |
 | GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. |
-| GET | `/venues/by_capacity?state=` | Ranks venues by capacity, largest first; `state` is optional. |
+| GET | `/venues/by_capacity?state=&country=&limit=` | Ranks venues by capacity, largest first. All three filters are optional and combine; `state` is a state/province code, `country` a country code, `limit` a positive whole number. |
 | GET | `/distance?lat1=&lon1=&lat2=&lon2=` | Returns the great-circle distance in miles between two points. |
 | POST | `/road_trip` | Totals the mileage of a trip through a JSON list of venues, in order. |
 | GET | `/swagger.json` | Returns the API's Swagger specification. |

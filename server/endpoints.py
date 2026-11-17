@@ -45,6 +45,7 @@ ROAD_TRIP_VENUES = 'venues'
 VENUES_EP = '/venues'
 VENUES_RESP = 'Venues'
 VENUE_RESP = 'Venue'
+DELETED_RESP = 'Deleted venue'
 NEAREST_EP = f'{VENUES_EP}/nearest'
 NEAREST_RESP = 'Nearest venue'
 NEAREST_PARAMS = ('lat', 'lon')
@@ -391,6 +392,30 @@ class Venue(Resource):
         if venue is None:
             raise wz.NotFound(f'No venue found with id {venue_id!r}.')
         return {VENUE_RESP: venue}
+
+    @api.response(HTTPStatus.OK.value, 'Venue deleted')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'Venue not found')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
+    def delete(self, venue_id):
+        """
+        Delete one venue from MongoDB by its venue_id.
+
+        Lookup is case-insensitive, matching the GET on this route.
+        An unknown id returns 404 rather than succeeding quietly: a
+        strict reading of HTTP would let DELETE be idempotent and
+        answer 200 either way, but this route's GET already answers
+        404 for an unknown id, and a caller deleting a venue that was
+        never there has almost certainly got the id wrong.
+
+        Returns 200 with the id that was removed, which keeps every
+        response on this API a keyed JSON object. 204 No Content would
+        also be defensible and would carry no body.
+        """
+        if not data_load.delete_venue(venue_id):
+            raise wz.NotFound(f'No venue found with id {venue_id!r}.')
+        return {DELETED_RESP: venue_id.strip().upper()}
 
 
 @api.route(NEAREST_EP)

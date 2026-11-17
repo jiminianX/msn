@@ -650,3 +650,96 @@ def test_get_is_still_a_read_only_route():
     resp = TEST_CLIENT.get(ep.VENUES_EP)
     assert resp.status_code == HTTPStatus.OK
     assert len(resp.get_json()[ep.VENUES_RESP]) == 16
+
+
+# --- DELETE /venues/<venue_id> --------------------------------------
+
+
+@pytest.fixture
+def deletable_venues(monkeypatch):
+    """
+    Delete from a dict of the CSV venues instead of MongoDB.
+
+    Same reasoning as `venue_store`: these tests are about the
+    endpoint's status mapping, and the collection-level behaviour is
+    covered against a fake client in data/tests/test_load.py. Keeping
+    the write off a real database matters in RUN_DB_INTEGRATION mode,
+    where the autouse fixture steps aside.
+    """
+    remaining = dict(data_load.load_venues_from_csv())
+
+    def fake_delete(venue_id):
+        if not isinstance(venue_id, str) or not venue_id.strip():
+            return False
+        return remaining.pop(venue_id.strip().upper(), None) is not None
+
+    monkeypatch.setattr(data_load, 'delete_venue', fake_delete)
+    monkeypatch.setattr(data_load, 'load_venues', lambda: remaining)
+    return remaining
+
+
+def test_delete_venue_removes_it(deletable_venues):
+    resp = TEST_CLIENT.delete(f'{ep.VENUES_EP}/MSG')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.DELETED_RESP] == 'MSG'
+    assert 'MSG' not in deletable_venues
+
+
+def test_delete_venue_is_case_insensitive(deletable_venues):
+    resp = TEST_CLIENT.delete(f'{ep.VENUES_EP}/msg')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.DELETED_RESP] == 'MSG'
+
+
+def test_delete_unknown_venue_is_not_found(deletable_venues):
+    resp = TEST_CLIENT.delete(f'{ep.VENUES_EP}/NOPE')
+    assert resp.status_code == HTTPStatus.NOT_FOUND
+    assert 'NOPE' in resp.get_data(as_text=True)
+    assert len(deletable_venues) == 16
+
+
+def test_deleted_venue_is_gone_from_the_reads(deletable_venues):
+    TEST_CLIENT.delete(f'{ep.VENUES_EP}/MSG')
+    listing = TEST_CLIENT.get(ep.VENUES_EP).get_json()[ep.VENUES_RESP]
+    assert 'MSG' not in listing
+    assert len(listing) == 15
+    assert TEST_CLIENT.get(
+        f'{ep.VENUES_EP}/MSG').status_code == HTTPStatus.NOT_FOUND
+
+
+def test_delete_venue_twice_is_not_found_the_second_time(deletable_venues):
+    assert TEST_CLIENT.delete(
+        f'{ep.VENUES_EP}/MSG').status_code == HTTPStatus.OK
+    assert TEST_CLIENT.delete(
+        f'{ep.VENUES_EP}/MSG').status_code == HTTPStatus.NOT_FOUND
+
+
+def test_delete_venue_is_unavailable_when_the_db_is_down(monkeypatch):
+    def raise_down(venue_id):
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; the venue was not deleted.')
+    monkeypatch.setattr(data_load, 'delete_venue', raise_down)
+    resp = TEST_CLIENT.delete(f'{ep.VENUES_EP}/MSG')
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+def test_delete_does_not_affect_the_get_on_the_same_route(
+        deletable_venues):
+    """
+    Venue.get and Venue.delete share a resource class, so a 404 from
+    one must not be produced by the other.
+    """
+    assert TEST_CLIENT.get(
+        f'{ep.VENUES_EP}/MSG').status_code == HTTPStatus.OK
+    TEST_CLIENT.delete(f'{ep.VENUES_EP}/MSG')
+    assert TEST_CLIENT.get(
+        f'{ep.VENUES_EP}/MSG').status_code == HTTPStatus.NOT_FOUND
+
+
+def test_both_write_methods_are_wrapped_for_unavailability():
+    """
+    A write that is not wrapped answers 500 instead of 503 when Mongo
+    is gone, and no other test would catch it.
+    """
+    assert hasattr(ep.Venues.post, '__wrapped__')
+    assert hasattr(ep.Venue.delete, '__wrapped__')

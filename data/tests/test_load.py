@@ -222,6 +222,18 @@ class StoredCollection:
         doc[dbc.MONGO_ID] = stored[dbc.MONGO_ID]
         return stored
 
+    def delete_one(self, filt):
+        for index, doc in enumerate(self._docs):
+            if all(doc.get(k) == v for k, v in filt.items()):
+                del self._docs[index]
+                return StoredDeleteResult(1)
+        return StoredDeleteResult(0)
+
+
+class StoredDeleteResult:
+    def __init__(self, deleted_count):
+        self.deleted_count = deleted_count
+
 
 class StoredDB:
     def __init__(self, docs):
@@ -481,3 +493,86 @@ def test_a_created_venue_is_usable_by_the_geo_utilities(mongo_venues):
     assert len(rank_venues_by_capacity(venues)) == len(venues)
     assert nearest_venue(40.83, -73.93, venues)['venue'][
         'venue_id'] == 'YANKEE'
+
+
+# --- deleting a venue -----------------------------------------------
+
+
+def test_delete_venue_removes_it(mongo_venues):
+    assert ld.delete_venue('MSG') is True
+    assert 'MSG' not in ld.load_venues()
+    assert len(ld.load_venues()) == 15
+
+
+def test_delete_venue_is_case_insensitive(mongo_venues):
+    assert ld.delete_venue('msg') is True
+    assert 'MSG' not in ld.load_venues()
+
+
+def test_delete_venue_tolerates_surrounding_whitespace(mongo_venues):
+    assert ld.delete_venue('  msg  ') is True
+    assert 'MSG' not in ld.load_venues()
+
+
+def test_delete_venue_reports_an_unknown_id(mongo_venues):
+    assert ld.delete_venue('NOPE') is False
+    assert len(ld.load_venues()) == 16
+
+
+@pytest.mark.parametrize('venue_id', [None, '', '   ', 17, ['MSG']])
+def test_delete_venue_reports_a_bad_id(venue_id, mongo_venues):
+    assert ld.delete_venue(venue_id) is False
+    assert len(ld.load_venues()) == 16
+
+
+def test_delete_venue_removes_only_one(mongo_venues):
+    before = set(ld.load_venues())
+    ld.delete_venue('MSG')
+    assert before - set(ld.load_venues()) == {'MSG'}
+
+
+def test_delete_venue_raises_when_the_database_is_down(mongo_down):
+    with pytest.raises(dbc.DatabaseDown):
+        ld.delete_venue('MSG')
+
+
+def test_create_then_delete_round_trip(mongo_venues):
+    """
+    The pair is what makes either one testable without residue: a
+    create can be undone, so a test need not leave a document behind
+    to prove the write worked.
+    """
+    ld.create_venue(a_venue())
+    assert 'YANKEE' in ld.load_venues()
+    assert ld.delete_venue('YANKEE') is True
+    assert 'YANKEE' not in ld.load_venues()
+    assert len(ld.load_venues()) == 16
+
+
+def test_an_id_can_be_reused_after_deletion(mongo_venues):
+    """
+    The duplicate check reads the collection rather than a cache, so a
+    deleted id must become available again.
+    """
+    ld.create_venue(a_venue())
+    ld.delete_venue('YANKEE')
+    ld.create_venue(a_venue())
+    assert 'YANKEE' in ld.load_venues()
+
+
+def test_delete_clears_a_poisoned_document(mongo_venues):
+    """
+    The operational reason delete exists. A document with an
+    out-of-range latitude -- however it got there -- breaks
+    nearest_venue for every caller, and this is now the supported way
+    to remove it.
+    """
+    from geo.nearest import nearest_venue
+    bad = dict(NEW_VENUE)
+    bad['latitude'] = 200.0
+    dbc.create(ld.VENUES_COLLECTION, bad)
+    with pytest.raises(ValueError):
+        nearest_venue(40.7, -74.0, list(ld.load_venues().values()))
+    assert ld.delete_venue('YANKEE') is True
+    assert nearest_venue(
+        40.7, -74.0, list(ld.load_venues().values())) is not None

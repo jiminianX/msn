@@ -286,3 +286,34 @@ def create_venue(payload):
             f'a venue with id {record[VENUE_ID]!r} already exists')
     dbc.create(VENUES_COLLECTION, dict(record))
     return record
+
+
+def delete_venue(venue_id):
+    """
+    Remove one venue by its venue_id, case-insensitively.
+
+    Until this existed, a bad document could only be removed with a
+    mongosh session against the database -- which matters, because one
+    venue with an out-of-range coordinate makes `/venues/nearest` and
+    `/venues/by_capacity` answer 400 to every caller.
+
+    Args:
+        venue_id (str): The id to remove.
+
+    Returns:
+        bool: True when a venue was removed, False when nothing
+            matched. Reporting rather than raising leaves the HTTP
+            status choice with the endpoint and keeps this callable
+            from a script.
+
+    Raises:
+        dbc.DatabaseDown: If MongoDB is not reachable.
+    """
+    if not isinstance(venue_id, str) or not venue_id.strip():
+        return False
+    if not dbc.is_db_up():
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; the venue was not deleted.')
+    removed = dbc.delete(VENUES_COLLECTION,
+                         {VENUE_ID: venue_id.strip().upper()})
+    return removed > 0

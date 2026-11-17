@@ -19,6 +19,7 @@ The project is currently in early development. The following endpoints are imple
 | GET | `/leagues` | Lists the supported leagues. |
 | GET | `/leagues/<code>` | Returns one league by its code, e.g. `NBA`. |
 | GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. Read from MongoDB; 503 if the database is unreachable. |
+| POST | `/venues` | Creates a venue from a JSON body and stores it in MongoDB. All ten fields in `docs/DATA_MODEL.md` are required and no others are accepted; `venue_id` is stored upper-cased. Returns 201 with a `Location` header, 400 for an invalid body, 409 if the `venue_id` is taken, 503 if the database is unreachable. |
 | GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. Read from MongoDB; 503 if the database is unreachable. |
 | GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. Read from MongoDB; 503 if the database is unreachable. |
 | GET | `/venues/by_capacity?state=&country=&limit=` | Ranks venues by capacity, largest first. All three filters are optional and combine; `state` is a state/province code, `country` a country code, `limit` a positive whole number. Read from MongoDB; 503 if the database is unreachable. |

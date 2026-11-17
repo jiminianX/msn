@@ -206,7 +206,21 @@ class StoredCollection:
         # each document it is handed, so returning the stored dicts
         # would make a second read raise KeyError. Real pymongo decodes
         # new dicts per call, so copying is the faithful behaviour.
-        return [dict(doc) for doc in self._docs]
+        docs = [dict(doc) for doc in self._docs]
+        if filt:
+            docs = [doc for doc in docs
+                    if all(doc.get(k) == v for k, v in filt.items())]
+        return docs
+
+    def insert_one(self, doc):
+        stored = dict(doc)
+        stored[dbc.MONGO_ID] = len(self._docs) + 1
+        self._docs.append(stored)
+        # Real pymongo mutates the dict it is given by setting _id on
+        # it. Mimicking that is what makes the "no _id in the returned
+        # record" test meaningful rather than vacuous.
+        doc[dbc.MONGO_ID] = stored[dbc.MONGO_ID]
+        return stored
 
 
 class StoredDB:
@@ -298,3 +312,172 @@ def test_csv_loader_still_works_when_the_database_is_down(mongo_down):
     otherwise `make seed` could never run against an empty database.
     """
     assert len(ld.load_venues_from_csv()) == 16
+
+
+# --- creating a venue -----------------------------------------------
+
+NEW_VENUE = {
+    'venue_id': 'YANKEE',
+    'name': 'Yankee Stadium',
+    'city': 'New York',
+    'state_code': 'NY',
+    'country_code': 'US',
+    'capacity': 46537,
+    'opened_year': 2009,
+    'latitude': 40.8296,
+    'longitude': -73.9262,
+    'indoor': False,
+}
+
+
+def a_venue(**overrides):
+    """
+    Return a valid payload, with any field replaced or removed.
+
+    Passing None removes the field, which is how the missing-field
+    cases are written without repeating the whole dict each time.
+    """
+    payload = dict(NEW_VENUE)
+    for field, value in overrides.items():
+        if value is None:
+            payload.pop(field, None)
+        else:
+            payload[field] = value
+    return payload
+
+
+def test_create_venue_stores_and_returns_the_record(mongo_venues):
+    record = ld.create_venue(a_venue())
+    assert record['venue_id'] == 'YANKEE'
+    assert record['capacity'] == 46537
+    assert ld.load_venues()['YANKEE']['name'] == 'Yankee Stadium'
+
+
+def test_create_venue_returns_a_record_without_a_mongo_id(mongo_venues):
+    """
+    insert_one sets _id on the dict it is given, and an ObjectId is
+    not JSON serializable -- so the driver gets a copy and the caller
+    gets a record it can return straight over HTTP.
+    """
+    record = ld.create_venue(a_venue())
+    assert dbc.MONGO_ID not in record
+
+
+def test_create_venue_does_not_mutate_the_payload(mongo_venues):
+    payload = a_venue(venue_id='yankee')
+    ld.create_venue(payload)
+    assert payload['venue_id'] == 'yankee'
+    assert dbc.MONGO_ID not in payload
+
+
+def test_create_venue_upper_cases_the_id(mongo_venues):
+    """
+    get_venue() upper-cases its lookup, so a lower-case id would be
+    stored but unreachable through GET /venues/<id>.
+    """
+    record = ld.create_venue(a_venue(venue_id='yankee'))
+    assert record['venue_id'] == 'YANKEE'
+    assert ld.get_venue('yankee') is not None
+    assert ld.get_venue('YANKEE') is not None
+
+
+def test_create_venue_rejects_a_duplicate_id(mongo_venues):
+    ld.create_venue(a_venue())
+    with pytest.raises(ld.VenueExists) as err:
+        ld.create_venue(a_venue())
+    assert 'YANKEE' in str(err.value)
+
+
+def test_create_venue_rejects_a_duplicate_in_any_case(mongo_venues):
+    ld.create_venue(a_venue())
+    with pytest.raises(ld.VenueExists):
+        ld.create_venue(a_venue(venue_id='yankee'))
+
+
+def test_create_venue_rejects_an_existing_seeded_id(mongo_venues):
+    with pytest.raises(ld.VenueExists):
+        ld.create_venue(a_venue(venue_id='MSG'))
+
+
+def test_create_venue_raises_when_the_database_is_down(mongo_down):
+    with pytest.raises(dbc.DatabaseDown):
+        ld.create_venue(a_venue())
+
+
+@pytest.mark.parametrize('field', ld.VENUE_FIELDS)
+def test_create_venue_requires_every_documented_field(field, mongo_venues):
+    with pytest.raises(ValueError) as err:
+        ld.create_venue(a_venue(**{field: None}))
+    assert field in str(err.value)
+
+
+def test_create_venue_rejects_unknown_fields(mongo_venues):
+    """
+    A misspelled key must fail rather than being dropped, or the venue
+    is stored with a stray field and a missing real one.
+    """
+    payload = a_venue()
+    payload['capcity'] = 46537
+    with pytest.raises(ValueError) as err:
+        ld.create_venue(payload)
+    assert 'capcity' in str(err.value)
+
+
+@pytest.mark.parametrize('payload', [
+    None, 'a string', 42, ['a', 'list'],
+])
+def test_create_venue_rejects_a_non_object_body(payload, mongo_venues):
+    with pytest.raises(ValueError):
+        ld.create_venue(payload)
+
+
+@pytest.mark.parametrize('field,bad_value', [
+    ('latitude', 200.0),
+    ('latitude', -91),
+    ('longitude', 181),
+    ('latitude', 'north'),
+    ('capacity', -5),
+    ('capacity', 'many'),
+    ('opened_year', 1200),
+    ('opened_year', '19x8'),
+    ('indoor', 'maybe'),
+    ('name', ''),
+    ('name', '   '),
+    ('city', ''),
+    ('venue_id', ''),
+    ('state_code', ''),
+    ('country_code', ''),
+])
+def test_create_venue_rejects_bad_values(field, bad_value, mongo_venues):
+    with pytest.raises(ValueError):
+        ld.create_venue(a_venue(**{field: bad_value}))
+
+
+def test_create_venue_trims_surrounding_whitespace(mongo_venues):
+    record = ld.create_venue(a_venue(name='  Yankee Stadium  '))
+    assert record['name'] == 'Yankee Stadium'
+
+
+def test_nothing_is_stored_when_validation_fails(mongo_venues):
+    """
+    Validation runs before the connection check and the insert, so a
+    rejected payload must leave the collection exactly as it was.
+    """
+    before = len(ld.load_venues())
+    with pytest.raises(ValueError):
+        ld.create_venue(a_venue(latitude=200.0))
+    assert len(ld.load_venues()) == before
+
+
+def test_a_created_venue_is_usable_by_the_geo_utilities(mongo_venues):
+    """
+    The point of validating on write: everything in the collection
+    stays safe to hand to the geo package afterwards.
+    """
+    from geo.capacity import rank_venues_by_capacity
+    from geo.nearest import nearest_venue
+    ld.create_venue(a_venue())
+    venues = list(ld.load_venues().values())
+    assert len(rank_venues_by_capacity(venues)) == len(venues)
+    assert nearest_venue(40.83, -73.93, venues)['venue'][
+        'venue_id'] == 'YANKEE'

@@ -335,6 +335,38 @@ class Venues(Resource):
         venues = data_load.load_venues()
         return {VENUES_RESP: venues}
 
+    @api.response(HTTPStatus.CREATED.value, 'Venue created')
+    @api.response(HTTPStatus.BAD_REQUEST.value,
+                  'Body is not a valid venue')
+    @api.response(HTTPStatus.CONFLICT.value,
+                  'A venue with that venue_id already exists')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
+    def post(self):
+        """
+        Create a venue from a JSON body and store it in MongoDB.
+
+        Every field in `docs/DATA_MODEL.md` is required and no others
+        are accepted: `venue_id`, `name`, `city`, `state_code`,
+        `country_code`, `capacity`, `opened_year`, `latitude`,
+        `longitude`, `indoor`. `venue_id` is stored upper-cased.
+
+        Returns 201 with the stored record and a `Location` header,
+        400 for an invalid body, 409 when the id is taken, and 503
+        when MongoDB is unreachable.
+        """
+        body = request.get_json(silent=True)
+        try:
+            venue = data_load.create_venue(body)
+        except data_load.VenueExists as err:
+            raise wz.Conflict(str(err))
+        except ValueError as err:
+            raise wz.BadRequest(f'Invalid venue: {err}.')
+        location = f'{VENUES_EP}/{venue[data_load.VENUE_ID]}'
+        return ({VENUE_RESP: venue}, HTTPStatus.CREATED,
+                {'Location': location})
+
 
 @api.route(f'{VENUES_EP}/<venue_id>')
 @api.doc(params={'venue_id': 'Venue identifier, e.g. MSG '

@@ -478,3 +478,175 @@ def test_the_decorator_is_applied_to_every_venue_read():
     for resource in (ep.Venues, ep.Venue, ep.NearestVenue,
                      ep.VenuesByCapacity):
         assert hasattr(resource.get, '__wrapped__'), resource.__name__
+
+
+# --- POST /venues ---------------------------------------------------
+
+NEW_VENUE = {
+    'venue_id': 'YANKEE',
+    'name': 'Yankee Stadium',
+    'city': 'New York',
+    'state_code': 'NY',
+    'country_code': 'US',
+    'capacity': 46537,
+    'opened_year': 2009,
+    'latitude': 40.8296,
+    'longitude': -73.9262,
+    'indoor': False,
+}
+
+
+def a_venue(**overrides):
+    payload = dict(NEW_VENUE)
+    for field, value in overrides.items():
+        if value is None:
+            payload.pop(field, None)
+        else:
+            payload[field] = value
+    return payload
+
+
+@pytest.fixture
+def venue_store(monkeypatch):
+    """
+    Store created venues in a dict instead of MongoDB.
+
+    Only the storage call is replaced -- `validated_venue` still runs,
+    so every 400 in these tests is produced by the same validation a
+    real request meets. The database-level behaviour (the duplicate
+    lookup, insert_one's _id mutation, DatabaseDown) is covered
+    against a fake client in data/tests/test_load.py.
+
+    This also keeps the suite from writing into a real database in
+    RUN_DB_INTEGRATION mode, where the autouse fixture steps aside.
+    """
+    stored = {}
+
+    def fake_create(payload):
+        record = data_load.validated_venue(payload)
+        venue_id = record[data_load.VENUE_ID]
+        if venue_id in stored:
+            raise data_load.VenueExists(
+                f'a venue with id {venue_id!r} already exists')
+        stored[venue_id] = record
+        return record
+
+    monkeypatch.setattr(data_load, 'create_venue', fake_create)
+    return stored
+
+
+def test_post_venue_creates_it(venue_store):
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    assert resp.status_code == HTTPStatus.CREATED
+    venue = resp.get_json()[ep.VENUE_RESP]
+    assert venue['venue_id'] == 'YANKEE'
+    assert venue['capacity'] == 46537
+    assert venue['indoor'] is False
+    assert 'YANKEE' in venue_store
+
+
+def test_post_venue_returns_a_location_header(venue_store):
+    """
+    A 201 should say where the thing it made now lives, so a client
+    does not have to assemble the URL itself.
+    """
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    assert resp.headers['Location'].endswith(f'{ep.VENUES_EP}/YANKEE')
+
+
+def test_post_venue_response_is_json_serializable(venue_store):
+    """
+    An ObjectId would blow up here, which is why create_venue hands
+    the driver a copy rather than the record it returns.
+    """
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    assert ep.dbc.MONGO_ID not in resp.get_json()[ep.VENUE_RESP]
+
+
+def test_post_duplicate_venue_is_a_conflict(venue_store):
+    TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    assert resp.status_code == HTTPStatus.CONFLICT
+    assert 'YANKEE' in resp.get_data(as_text=True)
+
+
+@pytest.mark.parametrize('field', [
+    'venue_id', 'name', 'city', 'state_code', 'country_code',
+    'capacity', 'opened_year', 'latitude', 'longitude', 'indoor',
+])
+def test_post_venue_missing_a_field_is_a_bad_request(field, venue_store):
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue(**{field: None}))
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert field in resp.get_data(as_text=True)
+
+
+@pytest.mark.parametrize('field,bad_value', [
+    ('latitude', 200.0),
+    ('longitude', 181),
+    ('capacity', -5),
+    ('capacity', 'many'),
+    ('opened_year', 1200),
+    ('indoor', 'maybe'),
+    ('name', '   '),
+])
+def test_post_venue_with_a_bad_value_is_a_bad_request(
+        field, bad_value, venue_store):
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue(**{field: bad_value}))
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_post_venue_with_an_unknown_field_is_a_bad_request(venue_store):
+    payload = a_venue()
+    payload['capcity'] = 46537
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=payload)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert 'capcity' in resp.get_data(as_text=True)
+
+
+@pytest.mark.parametrize('body', [None, 'a string', 42, ['a', 'list']])
+def test_post_venue_with_a_non_object_body_is_a_bad_request(
+        body, venue_store):
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=body)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_post_venue_with_no_body_is_a_bad_request(venue_store):
+    resp = TEST_CLIENT.post(ep.VENUES_EP)
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_post_venue_is_unavailable_when_the_db_is_down(monkeypatch):
+    def raise_down(payload):
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; the venue was not created.')
+    monkeypatch.setattr(data_load, 'create_venue', raise_down)
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue())
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+def test_a_rejected_post_cannot_poison_the_read_endpoints(venue_store):
+    """
+    The reason this endpoint validates at all.
+
+    Inserting a venue with latitude 200 directly into MongoDB makes
+    /venues/nearest and /venues/by_capacity answer 400 to every
+    caller until it is removed. A POST must not be able to do that.
+    """
+    resp = TEST_CLIENT.post(ep.VENUES_EP, json=a_venue(latitude=200.0))
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert venue_store == {}
+    assert TEST_CLIENT.get(ep.VENUES_EP).status_code == HTTPStatus.OK
+    nearest = TEST_CLIENT.get(ep.NEAREST_EP,
+                              query_string={'lat': '40.7', 'lon': '-74.0'})
+    assert nearest.status_code == HTTPStatus.OK
+    assert TEST_CLIENT.get(
+        ep.BY_CAPACITY_EP).status_code == HTTPStatus.OK
+
+
+def test_get_is_still_a_read_only_route():
+    """
+    Adding post() to the Venues resource must not change its get().
+    """
+    resp = TEST_CLIENT.get(ep.VENUES_EP)
+    assert resp.status_code == HTTPStatus.OK
+    assert len(resp.get_json()[ep.VENUES_RESP]) == 16

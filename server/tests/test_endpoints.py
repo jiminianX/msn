@@ -743,3 +743,36 @@ def test_both_write_methods_are_wrapped_for_unavailability():
     """
     assert hasattr(ep.Venues.post, '__wrapped__')
     assert hasattr(ep.Venue.delete, '__wrapped__')
+
+
+def test_get_venues_filtered_by_country():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'country': 'CA'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert len(venues) > 0
+    assert all(v['country_code'] == 'CA' for v in venues.values())
+
+
+def test_get_venues_country_case_insensitive():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'country': 'ca'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert len(venues) > 0
+    assert all(v['country_code'] == 'CA' for v in venues.values())
+
+
+def test_get_venues_unknown_country():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'country': 'ZZ'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUES_RESP] == {}

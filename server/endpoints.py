@@ -320,6 +320,9 @@ class RoadTrip(Resource):
 
 
 @api.route(VENUES_EP)
+@api.doc(params={
+    'country': 'Optional country code, e.g. US or CA',
+})
 class Venues(Resource):
     """
     Return every NBA and MLS venue in the directory.
@@ -333,7 +336,17 @@ class Venues(Resource):
         Return all venues loaded from the venues collection, keyed on
         venue_id. Returns 503 when MongoDB is not reachable.
         """
+
         venues = data_load.load_venues()
+        country = request.args.get('country')
+
+        if country is not None:
+            venues = {
+                venue_id: venue
+                for venue_id, venue in venues.items()
+                if venue['country_code'].upper() == country.upper()
+            }
+
         return {VENUES_RESP: venues}
 
     @api.response(HTTPStatus.CREATED.value, 'Venue created')

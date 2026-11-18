@@ -322,6 +322,7 @@ class RoadTrip(Resource):
 @api.route(VENUES_EP)
 @api.doc(params={
     'country': 'Optional country code, e.g. US or CA',
+    'state': 'Optional state/province code, e.g. NY or ON',
 })
 class Venues(Resource):
     """
@@ -345,6 +346,15 @@ class Venues(Resource):
                 venue_id: venue
                 for venue_id, venue in venues.items()
                 if venue['country_code'].upper() == country.upper()
+            }
+
+        state = request.args.get('state')
+
+        if state is not None:
+            venues = {
+                venue_id: venue
+                for venue_id, venue in venues.items()
+                if venue['state_code'].upper() == state.upper()
             }
 
         return {VENUES_RESP: venues}

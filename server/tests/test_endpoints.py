@@ -776,3 +776,43 @@ def test_get_venues_unknown_country():
 
     assert resp.status_code == HTTPStatus.OK
     assert resp.get_json()[ep.VENUES_RESP] == {}
+
+
+def test_get_venues_filtered_by_state():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'state': 'NY'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert len(venues) > 0
+    assert all(v['state_code'] == 'NY' for v in venues.values())
+
+
+def test_get_venues_state_case_insensitive():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'state': 'ny'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert len(venues) > 0
+    assert all(v['state_code'] == 'NY' for v in venues.values())
+
+
+def test_get_venues_combined_filters():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP,
+        query_string={'country': 'US', 'state': 'NY'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+
+    venues = resp.get_json()[ep.VENUES_RESP]
+    assert len(venues) > 0
+
+    for venue in venues.values():
+        assert venue['country_code'] == 'US'
+        assert venue['state_code'] == 'NY'

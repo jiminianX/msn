@@ -6,7 +6,7 @@ The Pro Sports Venue Directory is a REST API built with Flask that organizes NBA
 
 ## Current Status
 
-The venue endpoints are complete and backed by MongoDB; teams are readable from `data/teams.csv`; cities and the remaining collections are still to come. The following endpoints are implemented:
+The venue and team endpoints are complete and backed by MongoDB; cities and the remaining collections are still to come. The following endpoints are implemented:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -24,8 +24,8 @@ The venue endpoints are complete and backed by MongoDB; teams are readable from 
 | DELETE | `/venues/<venue_id>` | Deletes one venue from MongoDB, e.g. `/venues/MSG`. Case-insensitive. Returns 200 with the id removed, 404 for an unknown id, 503 if the database is unreachable. |
 | GET | `/venues/nearest?lat=&lon=` | Returns the venue closest to a coordinate and its distance in miles. Read from MongoDB; 503 if the database is unreachable. |
 | GET | `/venues/by_capacity?state=&country=&limit=` | Ranks venues by capacity, largest first. All three filters are optional and combine; `state` is a state/province code, `country` a country code, `limit` a positive whole number. Read from MongoDB; 503 if the database is unreachable. |
-| GET | `/teams?league=` | Lists every NBA and MLS team, keyed on `team_id`, with its `league_code` and home `venue_id`. `league` is an optional, case-insensitive league code; an unknown code returns an empty result. |
-| GET | `/teams/<team_id>` | Returns one team, e.g. `/teams/NYK`. Case-insensitive; 404 for an unknown id. |
+| GET | `/teams?league=` | Lists every NBA and MLS team, keyed on `team_id`, with its `league_code` and home `venue_id`. `league` is an optional, case-insensitive league code; an unknown code returns an empty result. Read from MongoDB; 503 if the database is unreachable. |
+| GET | `/teams/<team_id>` | Returns one team, e.g. `/teams/NYK`. Case-insensitive; 404 for an unknown id. Read from MongoDB; 503 if the database is unreachable. |
 | GET | `/distance?lat1=&lon1=&lat2=&lon2=` | Returns the great-circle distance in miles between two points. |
 | POST | `/road_trip` | Totals the mileage of a trip through a JSON list of venues, in order. |
 | GET | `/swagger.json` | Returns the API's Swagger specification. |

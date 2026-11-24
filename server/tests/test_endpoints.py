@@ -913,3 +913,83 @@ def test_team_venue_resolves_through_the_api():
     resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/{team["venue_id"]}')
     assert resp.status_code == HTTPStatus.OK
     assert resp.get_json()[ep.VENUE_RESP]['name'] == 'TD Garden'
+
+
+# --- the team endpoints when MongoDB is unreachable -----------------
+#
+# conftest.py serves these tests from the CSV so the rest of the suite
+# needs no database. These override that in the other direction, the
+# same way the venue 503 tests above do.
+
+TEAM_READ_ENDPOINTS = [
+    ep.TEAMS_EP,
+    f'{ep.TEAMS_EP}/NYK',
+]
+
+
+@pytest.fixture
+def teams_db_down(monkeypatch):
+    def raise_down():
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; team data is unavailable.')
+    monkeypatch.setattr(data_load, 'load_teams', raise_down)
+
+
+@pytest.mark.parametrize('endpoint', TEAM_READ_ENDPOINTS)
+def test_team_endpoints_are_unavailable_when_the_db_is_down(
+        endpoint, teams_db_down):
+    resp = TEST_CLIENT.get(endpoint)
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+def test_unavailable_team_response_explains_itself(teams_db_down):
+    """
+    503 with no message leaves the caller guessing between a crash and
+    a missing dependency, so the reason travels with the status.
+    """
+    resp = TEST_CLIENT.get(ep.TEAMS_EP)
+    assert 'MongoDB' in resp.get_data(as_text=True)
+
+
+def test_the_league_filter_is_unavailable_when_the_db_is_down(
+        teams_db_down):
+    """
+    The filter runs after the read, so a filtered request must fail
+    the same way rather than returning an empty list that looks like
+    'no teams in that league'.
+    """
+    resp = TEST_CLIENT.get(ep.TEAMS_EP,
+                           query_string={ep.TEAMS_LEAGUE: 'NBA'})
+    assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+
+
+def test_an_unknown_team_is_still_404_not_503(teams_db_down,
+                                              monkeypatch):
+    """
+    A reachable database with no such team is a 404. Only an
+    unreachable one is a 503, so the two must not be conflated.
+    """
+    monkeypatch.setattr(data_load, 'load_teams',
+                        data_load.load_teams_from_csv)
+    resp = TEST_CLIENT.get(f'{ep.TEAMS_EP}/XYZ')
+    assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_endpoints_without_teams_survive_a_teams_outage(teams_db_down):
+    """
+    Teams and venues are separate collections read through separate
+    loaders, so a teams failure must not take the venue endpoints
+    with it.
+    """
+    assert TEST_CLIENT.get(ep.VENUES_EP).status_code == HTTPStatus.OK
+    assert TEST_CLIENT.get(ep.LEAGUES_EP).status_code == HTTPStatus.OK
+    assert TEST_CLIENT.get(ep.HELLO_EP).status_code == HTTPStatus.OK
+
+
+def test_both_team_reads_are_wrapped_for_unavailability():
+    """
+    An unwrapped read answers 500 instead of 503 when Mongo is gone,
+    and no other test would catch it.
+    """
+    assert hasattr(ep.Teams.get, '__wrapped__')
+    assert hasattr(ep.Team.get, '__wrapped__')

@@ -236,22 +236,40 @@ class StoredDeleteResult:
 
 
 class StoredDB:
-    def __init__(self, docs):
-        self._docs = docs
+    def __init__(self, by_collection):
+        self._by_collection = by_collection
 
     def __getitem__(self, collection):
-        if collection == ld.VENUES_COLLECTION:
-            return StoredCollection(self._docs)
-        return StoredCollection([])
+        # setdefault, not a bare get: an insert into a collection the
+        # store was not seeded with has to persist, the way it would
+        # in a real database.
+        return StoredCollection(
+            self._by_collection.setdefault(collection, []))
 
 
 class StoredClient:
-    def __init__(self, docs):
-        self._docs = docs
+    def __init__(self, by_collection):
+        self._by_collection = by_collection
         self.admin = PingableAdmin()
 
     def __getitem__(self, db):
-        return StoredDB(self._docs)
+        return StoredDB(self._by_collection)
+
+
+def as_documents(records):
+    """
+    Give each record an _id, the way a seeded collection would have.
+    """
+    return [dict(record, **{dbc.MONGO_ID: number})
+            for number, record in enumerate(records, start=1)]
+
+
+def install_store(monkeypatch, by_collection):
+    client = StoredClient(by_collection)
+    monkeypatch.delenv('CLOUD_MONGO', raising=False)
+    monkeypatch.setattr(dbc, 'client', None)
+    monkeypatch.setattr(dbc.pm, 'MongoClient', lambda *a, **kw: client)
+    return client
 
 
 @pytest.fixture
@@ -260,17 +278,21 @@ def mongo_venues(monkeypatch):
     Serve the venues collection from an in-memory store seeded with the
     CSV, which is what `make seed` does against a real database.
     """
-    docs = []
-    for number, venue in enumerate(
-            ld.load_venues_from_csv().values(), start=1):
-        doc = dict(venue)
-        doc[dbc.MONGO_ID] = number
-        docs.append(doc)
-    client = StoredClient(docs)
-    monkeypatch.delenv('CLOUD_MONGO', raising=False)
-    monkeypatch.setattr(dbc, 'client', None)
-    monkeypatch.setattr(dbc.pm, 'MongoClient', lambda *a, **kw: client)
-    return client
+    return install_store(monkeypatch, {
+        ld.VENUES_COLLECTION: as_documents(
+            ld.load_venues_from_csv().values()),
+    })
+
+
+@pytest.fixture
+def mongo_teams(monkeypatch):
+    """
+    Same, for the teams collection.
+    """
+    return install_store(monkeypatch, {
+        ld.TEAMS_COLLECTION: as_documents(
+            ld.load_teams_from_csv().values()),
+    })
 
 
 @pytest.fixture
@@ -578,40 +600,41 @@ def test_delete_clears_a_poisoned_document(mongo_venues):
         40.7, -74.0, list(ld.load_venues().values())) is not None
 
 
-def test_load_teams():
-    teams = ld.load_teams()
+def test_load_teams_from_csv():
+    teams = ld.load_teams_from_csv()
     assert len(teams) == 16
     assert teams['NYK']['name'] == 'New York Knicks'
     assert teams['NYK']['venue_id'] == 'MSG'
     assert teams['NYK']['founded_year'] == 1946
 
 
-def test_load_teams_types():
-    for team in ld.load_teams().values():
+def test_load_teams_from_csv_types():
+    for team in ld.load_teams_from_csv().values():
         assert isinstance(team['founded_year'], int)
 
 
 def test_every_team_links_to_a_known_league_and_venue():
     leagues = ld.load_leagues()
     venues = ld.load_venues_from_csv()
-    for team_id, team in ld.load_teams().items():
+    for team_id, team in ld.load_teams_from_csv().items():
         assert team['league_code'] in leagues, team_id
         assert team['venue_id'] in venues, team_id
 
 
 def test_mls_teams_have_no_division():
-    mls = [t for t in ld.load_teams().values() if t['league_code'] == 'MLS']
+    mls = [t for t in ld.load_teams_from_csv().values()
+           if t['league_code'] == 'MLS']
     assert mls
     assert all(t['division'] == '' for t in mls)
 
 
-def test_get_team():
+def test_get_team(mongo_teams):
     team = ld.get_team('nyk')
     assert team['name'] == 'New York Knicks'
     assert ld.get_team(' NYK ') == team
 
 
-def test_get_team_not_found():
+def test_get_team_not_found(mongo_teams):
     assert ld.get_team('XYZ') is None
     assert ld.get_team(None) is None
 
@@ -619,3 +642,74 @@ def test_get_team_not_found():
 def test_typed_team_rejects_bad_year():
     with pytest.raises(ValueError):
         ld.typed_team({'team_id': 'BAD', 'founded_year': 'soon'})
+
+
+# --- teams read from MongoDB -----------------------------------------
+
+
+def test_load_teams_reads_the_collection(mongo_teams):
+    teams = ld.load_teams()
+    assert len(teams) == 16
+    assert teams['NYK']['name'] == 'New York Knicks'
+
+
+def test_load_teams_keeps_the_founded_year_an_int(mongo_teams):
+    """
+    typed_team converts on the way in, so the stored documents hold
+    integers and the read path must not turn them back into text.
+    """
+    for team_id, team in ld.load_teams().items():
+        assert isinstance(team['founded_year'], int), team_id
+
+
+def test_load_teams_strips_the_mongo_id(mongo_teams):
+    """
+    _id is an ObjectId in a real database and is not JSON
+    serializable, so it must not reach the API response.
+    """
+    for team in ld.load_teams().values():
+        assert dbc.MONGO_ID not in team
+
+
+def test_load_teams_can_be_read_twice(mongo_teams):
+    """
+    read() deletes _id from each document as it goes; this pins that
+    reading is not destructive.
+    """
+    assert ld.load_teams() == ld.load_teams()
+
+
+def test_load_teams_raises_when_the_database_is_down(mongo_down):
+    with pytest.raises(dbc.DatabaseDown) as err:
+        ld.load_teams()
+    assert 'not reachable' in str(err.value)
+
+
+def test_get_team_raises_when_the_database_is_down(mongo_down):
+    """
+    get_team() resolves load_teams through the module namespace, so it
+    inherits the failure rather than returning None -- which would be
+    indistinguishable from 'no such team'.
+    """
+    with pytest.raises(dbc.DatabaseDown):
+        ld.get_team('NYK')
+
+
+def test_the_team_csv_loader_works_with_the_database_down(mongo_down):
+    """
+    The CSV path is the seed source and must not need Mongo, or
+    `make seed` could never populate an empty database.
+    """
+    assert len(ld.load_teams_from_csv()) == 16
+
+
+def test_teams_and_venues_are_separate_collections(mongo_teams):
+    """
+    The two loaders name different collections, so a teams read must
+    never return venue documents or the reverse. Here only teams is
+    seeded, so venues reads empty rather than echoing the teams.
+    """
+    teams = ld.load_teams()
+    assert teams
+    assert ld.load_venues() == {}
+    assert 'NYK' not in ld.load_venues()

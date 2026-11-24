@@ -529,6 +529,9 @@ class Teams(Resource):
     Return the NBA and MLS teams in the directory.
     """
     @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self):
         """
         Return every team, keyed on team_id.
@@ -536,7 +539,8 @@ class Teams(Resource):
         Each team carries its league_code and the venue_id of its home
         venue, so a client can follow either link to /leagues or
         /venues. Pass `league` to keep only one league's teams; a code
-        with no teams returns an empty result rather than 404.
+        with no teams returns an empty result rather than 404. Read
+        from MongoDB; 503 when the database is unreachable.
         """
         teams = data_load.load_teams()
         league = request.args.get(TEAMS_LEAGUE)
@@ -557,11 +561,15 @@ class Team(Resource):
     """
     @api.response(HTTPStatus.OK.value, 'Success')
     @api.response(HTTPStatus.NOT_FOUND.value, 'Team not found')
+    @api.response(HTTPStatus.SERVICE_UNAVAILABLE.value,
+                  'MongoDB is not reachable')
+    @unavailable_when_db_is_down
     def get(self, team_id):
         """
         Return a single team by its team_id.
 
-        Lookup is case-insensitive; unknown identifiers return 404.
+        Lookup is case-insensitive; unknown identifiers return 404,
+        and an unreachable MongoDB returns 503.
         """
         team = data_load.get_team(team_id)
         if team is None:

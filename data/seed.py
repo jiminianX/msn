@@ -75,7 +75,7 @@ def seed_all():
         VENUES_COLLECTION: ld.load_venues_from_csv(),
         COUNTRIES_COLLECTION: ld.load_countries(),
         LEAGUES_COLLECTION: ld.load_leagues(),
-        TEAMS_COLLECTION: ld.load_teams(),
+        TEAMS_COLLECTION: ld.load_teams_from_csv(),
     }
     counts = {}
     for collection, by_key in sources.items():

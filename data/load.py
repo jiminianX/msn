@@ -19,6 +19,7 @@ VENUES_CSV = os.path.join(DATA_DIR, 'venues.csv')
 TEAMS_CSV = os.path.join(DATA_DIR, 'teams.csv')
 
 VENUES_COLLECTION = 'venues'
+TEAMS_COLLECTION = 'teams'
 
 CODE = 'code'
 VENUE_ID = 'venue_id'
@@ -104,11 +105,41 @@ def typed_team(row):
     return team
 
 
+def load_teams_from_csv():
+    """
+    Return every team from the CSV, keyed on its team_id.
+
+    This is the seed source: `data/seed.py` reads it to populate the
+    teams collection. Kept separate from `load_teams()` so the serving
+    path and the seeding path cannot drift apart, and so the CSV stays
+    readable without a database. Mirrors load_venues_from_csv().
+    """
+    return {row[TEAM_ID]: typed_team(row)
+            for row in load_csv(TEAMS_CSV)}
+
+
 def load_teams():
     """
-    Return every team as a dict keyed on its team_id.
+    Return every team from the teams collection, keyed on team_id.
+
+    This reads MongoDB, not the CSV. The CSV stays the seed source in
+    version control -- run `make seed` on a fresh checkout -- and the
+    database is what the API serves. The seeder already writes this
+    collection, so until now those documents were written and never
+    read.
+
+    No silent fallback to the CSV, for the same reason load_venues()
+    has none: a fallback makes "Mongo is working" and "Mongo is
+    broken" produce identical responses, so a passing request proves
+    nothing about the database.
+
+    Raises:
+        dbc.DatabaseDown: when MongoDB is not reachable.
     """
-    return {row[TEAM_ID]: typed_team(row) for row in load_csv(TEAMS_CSV)}
+    if not dbc.is_db_up():
+        raise dbc.DatabaseDown(
+            'MongoDB is not reachable; team data is unavailable.')
+    return dbc.read_dict(TEAMS_COLLECTION, TEAM_ID)
 
 
 def get_team(team_id):

@@ -39,14 +39,17 @@ INTEGRATION_ENV = 'RUN_DB_INTEGRATION'
 @pytest.fixture(autouse=True)
 def database_available(monkeypatch):
     """
-    Report the database as up and serve venues from the CSV.
+    Report the database as up and serve venues and teams from the CSV.
 
-    `get_venue()` resolves `load_venues` through the module namespace
-    at call time, so replacing that one attribute covers the single
-    and the plural lookup together.
+    `get_venue()` and `get_team()` resolve `load_venues` and
+    `load_teams` through the module namespace at call time, so
+    replacing those two attributes covers the single and the plural
+    lookup for each.
     """
     if os.getenv(INTEGRATION_ENV) == '1':
         return
     monkeypatch.setattr(sqry, 'is_db_up', lambda: True)
     monkeypatch.setattr(data_load, 'load_venues',
                         data_load.load_venues_from_csv)
+    monkeypatch.setattr(data_load, 'load_teams',
+                        data_load.load_teams_from_csv)

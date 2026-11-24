@@ -1,0 +1,17 @@
+team_id,name,league_code,venue_id,founded_year,conference,division
+NYK,New York Knicks,NBA,MSG,1946,Eastern,Atlantic
+BKN,Brooklyn Nets,NBA,BARCLAYS,1967,Eastern,Atlantic
+BOS,Boston Celtics,NBA,TDGARDEN,1946,Eastern,Atlantic
+TOR,Toronto Raptors,NBA,SCOTIABANK,1995,Eastern,Atlantic
+CHI,Chicago Bulls,NBA,UNITED,1966,Eastern,Central
+MIA,Miami Heat,NBA,KASEYA,1988,Eastern,Southeast
+LAL,Los Angeles Lakers,NBA,CRYPTO,1947,Western,Pacific
+GSW,Golden State Warriors,NBA,CHASE,1946,Western,Pacific
+DAL,Dallas Mavericks,NBA,AAC,1980,Western,Southwest
+DEN,Denver Nuggets,NBA,BALL,1967,Western,Northwest
+TFC,Toronto FC,MLS,BMOFIELD,2006,Eastern,
+MTL,CF Montréal,MLS,SAPUTO,2010,Eastern,
+VAN,Vancouver Whitecaps FC,MLS,BCPLACE,2009,Western,
+POR,Portland Timbers,MLS,PROVIDENCE,2009,Western,
+MIN,Minnesota United FC,MLS,ALLIANZ,2015,Western,
+ATX,Austin FC,MLS,Q2,2018,Western,

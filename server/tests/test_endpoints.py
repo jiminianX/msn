@@ -857,3 +857,59 @@ def test_get_venues_state_and_country_are_judged_separately():
 
     assert resp.status_code == HTTPStatus.OK
     assert resp.get_json()[ep.VENUES_RESP] == {}
+
+
+def test_get_teams():
+    resp = TEST_CLIENT.get(ep.TEAMS_EP)
+    assert resp.status_code == HTTPStatus.OK
+    teams = resp.get_json()[ep.TEAMS_RESP]
+    assert isinstance(teams, dict)
+    assert len(teams) == 16
+    assert teams['NYK']['venue_id'] == 'MSG'
+
+
+def test_teams_is_listed_in_endpoints():
+    resp = TEST_CLIENT.get(ep.ENDPOINT_EP)
+    assert ep.TEAMS_EP in resp.get_json()[ep.ENDPOINT_RESP]
+
+
+@pytest.mark.parametrize('league', ['NBA', 'mls'])
+def test_get_teams_filtered_by_league(league):
+    resp = TEST_CLIENT.get(f'{ep.TEAMS_EP}?{ep.TEAMS_LEAGUE}={league}')
+    assert resp.status_code == HTTPStatus.OK
+    teams = resp.get_json()[ep.TEAMS_RESP]
+    assert teams
+    assert all(t['league_code'] == league.upper() for t in teams.values())
+
+
+def test_get_teams_unknown_league_is_empty_not_404():
+    resp = TEST_CLIENT.get(f'{ep.TEAMS_EP}?{ep.TEAMS_LEAGUE}=XFL')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.TEAMS_RESP] == {}
+
+
+def test_get_team():
+    resp = TEST_CLIENT.get(f'{ep.TEAMS_EP}/TFC')
+    assert resp.status_code == HTTPStatus.OK
+    team = resp.get_json()[ep.TEAM_RESP]
+    assert team['name'] == 'Toronto FC'
+    assert team['league_code'] == 'MLS'
+
+
+def test_get_team_case_insensitive():
+    upper = TEST_CLIENT.get(f'{ep.TEAMS_EP}/LAL')
+    lower = TEST_CLIENT.get(f'{ep.TEAMS_EP}/lal')
+    assert lower.status_code == HTTPStatus.OK
+    assert upper.get_json() == lower.get_json()
+
+
+def test_get_team_not_found():
+    resp = TEST_CLIENT.get(f'{ep.TEAMS_EP}/XYZ')
+    assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_team_venue_resolves_through_the_api():
+    team = TEST_CLIENT.get(f'{ep.TEAMS_EP}/BOS').get_json()[ep.TEAM_RESP]
+    resp = TEST_CLIENT.get(f'{ep.VENUES_EP}/{team["venue_id"]}')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUE_RESP]['name'] == 'TD Garden'

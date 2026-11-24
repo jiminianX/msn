@@ -576,3 +576,46 @@ def test_delete_clears_a_poisoned_document(mongo_venues):
     assert ld.delete_venue('YANKEE') is True
     assert nearest_venue(
         40.7, -74.0, list(ld.load_venues().values())) is not None
+
+
+def test_load_teams():
+    teams = ld.load_teams()
+    assert len(teams) == 16
+    assert teams['NYK']['name'] == 'New York Knicks'
+    assert teams['NYK']['venue_id'] == 'MSG'
+    assert teams['NYK']['founded_year'] == 1946
+
+
+def test_load_teams_types():
+    for team in ld.load_teams().values():
+        assert isinstance(team['founded_year'], int)
+
+
+def test_every_team_links_to_a_known_league_and_venue():
+    leagues = ld.load_leagues()
+    venues = ld.load_venues_from_csv()
+    for team_id, team in ld.load_teams().items():
+        assert team['league_code'] in leagues, team_id
+        assert team['venue_id'] in venues, team_id
+
+
+def test_mls_teams_have_no_division():
+    mls = [t for t in ld.load_teams().values() if t['league_code'] == 'MLS']
+    assert mls
+    assert all(t['division'] == '' for t in mls)
+
+
+def test_get_team():
+    team = ld.get_team('nyk')
+    assert team['name'] == 'New York Knicks'
+    assert ld.get_team(' NYK ') == team
+
+
+def test_get_team_not_found():
+    assert ld.get_team('XYZ') is None
+    assert ld.get_team(None) is None
+
+
+def test_typed_team_rejects_bad_year():
+    with pytest.raises(ValueError):
+        ld.typed_team({'team_id': 'BAD', 'founded_year': 'soon'})

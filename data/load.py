@@ -16,11 +16,15 @@ DATA_DIR = os.path.dirname(__file__)
 COUNTRIES_CSV = os.path.join(DATA_DIR, 'countries.csv')
 LEAGUES_CSV = os.path.join(DATA_DIR, 'leagues.csv')
 VENUES_CSV = os.path.join(DATA_DIR, 'venues.csv')
+TEAMS_CSV = os.path.join(DATA_DIR, 'teams.csv')
 
 VENUES_COLLECTION = 'venues'
 
 CODE = 'code'
 VENUE_ID = 'venue_id'
+TEAM_ID = 'team_id'
+LEAGUE_CODE = 'league_code'
+FOUNDED_YEAR = 'founded_year'
 
 VENUE_INT_FIELDS = ('capacity', 'opened_year')
 VENUE_FLOAT_FIELDS = ('latitude', 'longitude')
@@ -77,6 +81,44 @@ def load_leagues():
     Return every league as a dict keyed on its code.
     """
     return {row[CODE]: row for row in load_csv(LEAGUES_CSV)}
+
+
+def typed_team(row):
+    """
+    Return a copy of a team row with founded_year as an int.
+
+    Every other field is text. MLS has no divisions, so an MLS team's
+    division is an empty string rather than missing, which keeps every
+    team record the same shape.
+
+    Raises:
+        ValueError: If founded_year is not a whole number.
+    """
+    team = dict(row)
+    try:
+        team[FOUNDED_YEAR] = int(team[FOUNDED_YEAR])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(
+            f'Team {team.get(TEAM_ID)!r} has an invalid '
+            f'{FOUNDED_YEAR}: {team.get(FOUNDED_YEAR)!r}')
+    return team
+
+
+def load_teams():
+    """
+    Return every team as a dict keyed on its team_id.
+    """
+    return {row[TEAM_ID]: typed_team(row) for row in load_csv(TEAMS_CSV)}
+
+
+def get_team(team_id):
+    """
+    Return one team's dict, looked up by its team_id
+    (case-insensitive), or None if it isn't found.
+    """
+    if not isinstance(team_id, str):
+        return None
+    return load_teams().get(team_id.strip().upper())
 
 
 def get_country(code):

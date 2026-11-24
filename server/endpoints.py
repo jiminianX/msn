@@ -54,6 +54,10 @@ BY_CAPACITY_RESP = 'Venues by capacity'
 BY_CAPACITY_STATE = 'state'
 BY_CAPACITY_COUNTRY = 'country'
 BY_CAPACITY_LIMIT = 'limit'
+TEAMS_EP = '/teams'
+TEAMS_RESP = 'Teams'
+TEAM_RESP = 'Team'
+TEAMS_LEAGUE = 'league'
 
 
 def parse_float_args(names):
@@ -514,3 +518,52 @@ class VenuesByCapacity(Resource):
         except ValueError as err:
             raise wz.BadRequest(f'Invalid ranking request: {err}')
         return {BY_CAPACITY_RESP: ranked}
+
+
+@api.route(TEAMS_EP)
+@api.doc(params={
+    TEAMS_LEAGUE: 'Optional league code, e.g. NBA or MLS (case-insensitive)',
+})
+class Teams(Resource):
+    """
+    Return the NBA and MLS teams in the directory.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    def get(self):
+        """
+        Return every team, keyed on team_id.
+
+        Each team carries its league_code and the venue_id of its home
+        venue, so a client can follow either link to /leagues or
+        /venues. Pass `league` to keep only one league's teams; a code
+        with no teams returns an empty result rather than 404.
+        """
+        teams = data_load.load_teams()
+        league = request.args.get(TEAMS_LEAGUE)
+        if league is not None:
+            teams = {
+                team_id: team
+                for team_id, team in teams.items()
+                if team[data_load.LEAGUE_CODE].upper() == league.upper()
+            }
+        return {TEAMS_RESP: teams}
+
+
+@api.route(f'{TEAMS_EP}/<team_id>')
+@api.doc(params={'team_id': 'Team identifier, e.g. NYK (case-insensitive)'})
+class Team(Resource):
+    """
+    Look up a single team by its identifier.
+    """
+    @api.response(HTTPStatus.OK.value, 'Success')
+    @api.response(HTTPStatus.NOT_FOUND.value, 'Team not found')
+    def get(self, team_id):
+        """
+        Return a single team by its team_id.
+
+        Lookup is case-insensitive; unknown identifiers return 404.
+        """
+        team = data_load.get_team(team_id)
+        if team is None:
+            raise wz.NotFound(f'No team found with id {team_id!r}.')
+        return {TEAM_RESP: team}

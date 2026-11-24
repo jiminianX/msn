@@ -71,6 +71,7 @@ def test_seed_all_writes_every_collection(store):
         seed.VENUES_COLLECTION,
         seed.COUNTRIES_COLLECTION,
         seed.LEAGUES_COLLECTION,
+        seed.TEAMS_COLLECTION,
     }
     assert counts[seed.VENUES_COLLECTION] == 16
     assert all(count > 0 for count in counts.values())

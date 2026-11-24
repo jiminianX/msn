@@ -23,6 +23,7 @@ import data.load as ld
 VENUES_COLLECTION = 'venues'
 COUNTRIES_COLLECTION = 'countries'
 LEAGUES_COLLECTION = 'leagues'
+TEAMS_COLLECTION = 'teams'
 
 # Each collection paired with the field that identifies a document, so
 # re-seeding matches an existing record instead of adding another.
@@ -30,6 +31,7 @@ COLLECTION_KEYS = {
     VENUES_COLLECTION: ld.VENUE_ID,
     COUNTRIES_COLLECTION: ld.CODE,
     LEAGUES_COLLECTION: ld.CODE,
+    TEAMS_COLLECTION: ld.TEAM_ID,
 }
 
 
@@ -73,6 +75,7 @@ def seed_all():
         VENUES_COLLECTION: ld.load_venues_from_csv(),
         COUNTRIES_COLLECTION: ld.load_countries(),
         LEAGUES_COLLECTION: ld.load_leagues(),
+        TEAMS_COLLECTION: ld.load_teams(),
     }
     counts = {}
     for collection, by_key in sources.items():

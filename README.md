@@ -6,7 +6,7 @@ The Pro Sports Venue Directory is a REST API built with Flask that organizes NBA
 
 ## Current Status
 
-The project is currently in early development. The following endpoints are implemented:
+The venue endpoints are complete and backed by MongoDB; teams, cities, and the remaining collections are still to come. The following endpoints are implemented:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -18,7 +18,7 @@ The project is currently in early development. The following endpoints are imple
 | GET | `/countries/<code>` | Returns one country by its two-letter code. |
 | GET | `/leagues` | Lists the supported leagues. |
 | GET | `/leagues/<code>` | Returns one league by its code, e.g. `NBA`. |
-| GET | `/venues` | Lists every NBA and MLS venue, keyed on `venue_id`. Read from MongoDB; 503 if the database is unreachable. |
+| GET | `/venues?country=&state=` | Lists every NBA and MLS venue, keyed on `venue_id`. Both filters are optional, case-insensitive, and combine; `country` is a country code, `state` a state/province code. An unknown code returns an empty result rather than 404. Read from MongoDB; 503 if the database is unreachable. |
 | POST | `/venues` | Creates a venue from a JSON body and stores it in MongoDB. All ten fields in `docs/DATA_MODEL.md` are required and no others are accepted; `venue_id` is stored upper-cased. Returns 201 with a `Location` header, 400 for an invalid body, 409 if the `venue_id` is taken, 503 if the database is unreachable. |
 | GET | `/venues/<venue_id>` | Returns one venue, e.g. `/venues/MSG`. Read from MongoDB; 503 if the database is unreachable. |
 | DELETE | `/venues/<venue_id>` | Deletes one venue from MongoDB, e.g. `/venues/MSG`. Case-insensitive. Returns 200 with the id removed, 404 for an unknown id, 503 if the database is unreachable. |
@@ -139,16 +139,12 @@ This command runs flake8 linting and pytest tests for the project's packages.
 
 ## Planned Features
 
-The project aims to support:
+Still to come:
 
-- CRUD endpoints for countries, states/provinces, cities, venues, teams, and leagues.
-- Finding the nearest NBA or MLS venue to a geographic coordinate.
-- Calculating distances between teams' home venues.
-- Calculating total travel distances for multi-game road trips.
+- CRUD endpoints for teams, cities, and states/provinces.
+- Calculating distances between two teams' home venues.
 - Identifying cities with both NBA and MLS teams.
-- Ranking venues by seating capacity.
-
-These features are planned and are not yet available through the API.
+- Moving the countries, leagues, and states collections from CSV/hardcoded data into MongoDB.
 
 ## Team
 

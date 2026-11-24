@@ -816,3 +816,44 @@ def test_get_venues_combined_filters():
     for venue in venues.values():
         assert venue['country_code'] == 'US'
         assert venue['state_code'] == 'NY'
+
+
+def test_get_venues_filters_return_every_match():
+    """
+    The filter tests above check that every returned venue matches.
+    These pin the full sets, so a filter that silently dropped a
+    matching venue would also fail.
+    """
+    by_country = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'country': 'CA'}
+    ).get_json()[ep.VENUES_RESP]
+    assert set(by_country) == {'SCOTIABANK', 'BMOFIELD', 'SAPUTO',
+                               'BCPLACE'}
+
+    by_state = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'state': 'NY'}
+    ).get_json()[ep.VENUES_RESP]
+    assert set(by_state) == {'MSG', 'BARCLAYS'}
+
+
+def test_get_venues_unknown_state():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'state': 'ZZ'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUES_RESP] == {}
+
+
+def test_get_venues_state_and_country_are_judged_separately():
+    """
+    CA is California as a state but Canada as a country. Asking for
+    both at once matches no venue rather than mixing the two -- the
+    same guarantee /venues/by_capacity already tests.
+    """
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'country': 'CA', 'state': 'CA'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUES_RESP] == {}

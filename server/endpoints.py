@@ -327,6 +327,7 @@ class RoadTrip(Resource):
 @api.doc(params={
     'country': 'Optional country code, e.g. US or CA',
     'state': 'Optional state/province code, e.g. NY or ON',
+    'city': 'Optional city name, e.g. Toronto',
 })
 class Venues(Resource):
     """
@@ -359,6 +360,15 @@ class Venues(Resource):
                 venue_id: venue
                 for venue_id, venue in venues.items()
                 if venue['state_code'].upper() == state.upper()
+            }
+
+        city = request.args.get('city')
+
+        if city is not None:
+            venues = {
+                venue_id: venue
+                for venue_id, venue in venues.items()
+                if venue['city'].casefold() == city.casefold()
             }
 
         return {VENUES_RESP: venues}

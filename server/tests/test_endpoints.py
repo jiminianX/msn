@@ -993,3 +993,46 @@ def test_both_team_reads_are_wrapped_for_unavailability():
     """
     assert hasattr(ep.Teams.get, '__wrapped__')
     assert hasattr(ep.Team.get, '__wrapped__')
+
+
+def test_get_venues_by_city():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'city': 'Toronto'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'SCOTIABANK', 'BMOFIELD'}
+
+
+def test_get_venues_city_case_insensitive():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'city': 'toronto'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'SCOTIABANK', 'BMOFIELD'}
+
+
+def test_get_venues_unknown_city():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'city': 'UnknownCity'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUES_RESP] == {}
+
+
+def test_get_venues_city_with_country():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP,
+        query_string={'city': 'Toronto', 'country': 'CA'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'SCOTIABANK', 'BMOFIELD'}

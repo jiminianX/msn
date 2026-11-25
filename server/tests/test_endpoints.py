@@ -1036,3 +1036,46 @@ def test_get_venues_city_with_country():
     venues = resp.get_json()[ep.VENUES_RESP]
 
     assert set(venues) == {'SCOTIABANK', 'BMOFIELD'}
+
+
+def test_get_venues_by_name():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'name': 'Garden'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'MSG', 'TDGARDEN'}
+
+
+def test_get_venues_name_case_insensitive():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'name': 'garden'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'MSG', 'TDGARDEN'}
+
+
+def test_get_venues_name_no_match():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP, query_string={'name': 'UnknownVenue'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.get_json()[ep.VENUES_RESP] == {}
+
+
+def test_get_venues_name_with_city():
+    resp = TEST_CLIENT.get(
+        ep.VENUES_EP,
+        query_string={'name': 'Garden', 'city': 'New York'}
+    )
+
+    assert resp.status_code == HTTPStatus.OK
+    venues = resp.get_json()[ep.VENUES_RESP]
+
+    assert set(venues) == {'MSG'}

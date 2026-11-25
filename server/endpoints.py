@@ -328,6 +328,7 @@ class RoadTrip(Resource):
     'country': 'Optional country code, e.g. US or CA',
     'state': 'Optional state/province code, e.g. NY or ON',
     'city': 'Optional city name, e.g. Toronto',
+    'name': 'Optional partial venue name, e.g. Garden',
 })
 class Venues(Resource):
     """
@@ -369,6 +370,15 @@ class Venues(Resource):
                 venue_id: venue
                 for venue_id, venue in venues.items()
                 if venue['city'].casefold() == city.casefold()
+            }
+
+        name = request.args.get('name')
+
+        if name is not None:
+            venues = {
+                venue_id: venue
+                for venue_id, venue in venues.items()
+                if name.casefold() in venue['name'].casefold()
             }
 
         return {VENUES_RESP: venues}
